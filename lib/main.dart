@@ -172,6 +172,9 @@ class _HomeState extends State<_Home> {
         : FloatingActionButton.extended(
             backgroundColor: accent,
             foregroundColor: Colors.white,
+            elevation: 4,
+            highlightElevation: 1,
+            splashColor: const Color(0x30FFFFFF),
             onPressed: record,
             icon: const Icon(Icons.add),
             label: const Text('记一笔'),

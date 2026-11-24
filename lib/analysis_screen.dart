@@ -48,47 +48,66 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
         return StatefulBuilder(
           builder: (context, change) => AlertDialog(
             title: const Text('选择报告月份'),
+            insetPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 24,
+            ),
+            contentPadding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
             content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      IconButton(
-                        tooltip: '上一年',
-                        onPressed: year <= 1900
-                            ? null
-                            : () => change(() => year--),
-                        icon: const Icon(Icons.chevron_left),
-                      ),
-                      Text('$year 年'),
-                      IconButton(
-                        tooltip: '下一年',
-                        onPressed: year >= now.year
-                            ? null
-                            : () => change(() => year++),
-                        icon: const Icon(Icons.chevron_right),
-                      ),
-                    ],
-                  ),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      for (var index = 1; index <= 12; index++)
-                        ChoiceChip(
-                          label: Text('$index 月'),
-                          selected: year == month.year && index == month.month,
-                          onSelected: year == now.year && index > now.month
+              child: SizedBox(
+                width: 272,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        IconButton(
+                          tooltip: '上一年',
+                          onPressed: year <= 1900
                               ? null
-                              : (_) => Navigator.pop(
-                                  context,
-                                  DateTime(year, index),
-                                ),
+                              : () => change(() => year--),
+                          icon: const Icon(Icons.chevron_left),
                         ),
-                    ],
-                  ),
-                ],
+                        Text('$year 年'),
+                        IconButton(
+                          tooltip: '下一年',
+                          onPressed: year >= now.year
+                              ? null
+                              : () => change(() => year++),
+                          icon: const Icon(Icons.chevron_right),
+                        ),
+                      ],
+                    ),
+                    for (var row = 0; row < 3; row++)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Row(
+                          children: [
+                            for (var col = 0; col < 4; col++)
+                              Expanded(
+                                child: Center(
+                                  child: _MonthButton(
+                                    number: row * 4 + col + 1,
+                                    selected:
+                                        year == month.year &&
+                                        row * 4 + col + 1 == month.month,
+                                    onPressed:
+                                        year == now.year &&
+                                            row * 4 + col + 1 > now.month
+                                        ? null
+                                        : () => Navigator.pop(
+                                            context,
+                                            DateTime(year, row * 4 + col + 1),
+                                          ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
             actions: [
@@ -277,6 +296,40 @@ class _AnalysisScreenState extends State<AnalysisScreen> {
             ],
           );
         },
+      ),
+    ),
+  );
+}
+
+class _MonthButton extends StatelessWidget {
+  const _MonthButton({
+    required this.number,
+    required this.selected,
+    required this.onPressed,
+  });
+
+  final int number;
+  final bool selected;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: '$number 月',
+    selected: selected,
+    child: SizedBox.square(
+      dimension: 48,
+      child: TextButton(
+        onPressed: onPressed,
+        style: TextButton.styleFrom(
+          minimumSize: Size.zero,
+          padding: EdgeInsets.zero,
+          shape: const CircleBorder(),
+          foregroundColor: selected ? accent : ink,
+          backgroundColor: selected ? blueTint : controlTrack,
+          disabledBackgroundColor: Colors.transparent,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        child: ExcludeSemantics(child: Text('$number')),
       ),
     ),
   );

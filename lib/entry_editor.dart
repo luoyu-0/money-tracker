@@ -217,43 +217,45 @@ class _EntryEditorState extends State<_EntryEditor> {
                 FutureBuilder<List<EntryOption>>(
                   future: options,
                   builder: (context, snapshot) {
-                    final values = <String>{
-                      for (final option in [
-                        ...EntryOption.defaults,
-                        ...?snapshot.data,
-                      ])
-                        if (option.kind == kind) option.label,
-                      ?category,
-                    }.toList();
                     return SlidingEntryContent(
                       kind: kind,
-                      child: Wrap(
-                        spacing: 8,
-                        runSpacing: 2,
-                        children: [
-                          for (final value in values)
-                            ChoiceChip(
-                              label: Text(value),
-                              selected: category == value,
-                              onSelected: busy
-                                  ? null
-                                  : (_) => setState(() {
-                                      category = value;
-                                      showCategoryError = false;
-                                    }),
-                              chipAnimationStyle: ChipAnimationStyle(
-                                selectAnimation: AnimationStyle(
-                                  duration: motion(context, 140),
+                      builder: (side) {
+                        final values = <String>{
+                          for (final option in [
+                            ...EntryOption.defaults,
+                            ...?snapshot.data,
+                          ])
+                            if (option.kind == side) option.label,
+                          if (side == kind) ?category,
+                        }.toList();
+                        return Wrap(
+                          spacing: 8,
+                          runSpacing: 2,
+                          children: [
+                            for (final value in values)
+                              ChoiceChip(
+                                label: Text(value),
+                                selected: side == kind && category == value,
+                                onSelected: busy
+                                    ? null
+                                    : (_) => setState(() {
+                                        category = value;
+                                        showCategoryError = false;
+                                      }),
+                                chipAnimationStyle: ChipAnimationStyle(
+                                  selectAnimation: AnimationStyle(
+                                    duration: motion(context, 140),
+                                  ),
                                 ),
                               ),
+                            ActionChip(
+                              avatar: const Icon(Icons.add, size: 18),
+                              label: const Text('添加'),
+                              onPressed: busy ? null : () => addOption(values),
                             ),
-                          ActionChip(
-                            avatar: const Icon(Icons.add, size: 18),
-                            label: const Text('添加'),
-                            onPressed: busy ? null : () => addOption(values),
-                          ),
-                        ],
-                      ),
+                          ],
+                        );
+                      },
                     );
                   },
                 ),

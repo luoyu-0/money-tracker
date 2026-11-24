@@ -13,6 +13,10 @@ const incomeColor = Color(0xFF216B54);
 const expenseColor = Color(0xFFAA4C41);
 const rule = Color(0xFFDCE6F1);
 
+extension EntryKindStyle on EntryKind {
+  Color get color => this == EntryKind.income ? incomeColor : expenseColor;
+}
+
 ThemeData appTheme() {
   final colors = ColorScheme.fromSeed(seedColor: accent).copyWith(
     primary: accent,
@@ -58,7 +62,16 @@ ThemeData appTheme() {
       fillColor: paper,
     ),
     filledButtonTheme: FilledButtonThemeData(
-      style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+      style: FilledButton.styleFrom(minimumSize: const Size(48, 48)).copyWith(
+        elevation: WidgetStateProperty.resolveWith(
+          (states) =>
+              states.contains(WidgetState.disabled) ||
+                  states.contains(WidgetState.pressed)
+              ? 0
+              : 2,
+        ),
+        shadowColor: const WidgetStatePropertyAll(Color(0x33204770)),
+      ),
     ),
   );
 }
@@ -143,11 +156,7 @@ class MoneyText extends StatelessWidget {
       style: (large ? theme.headlineLarge : theme.titleMedium)?.copyWith(
         fontWeight: FontWeight.w600,
         fontFeatures: const [FontFeature.tabularFigures()],
-        color: switch (kind) {
-          EntryKind.income => incomeColor,
-          EntryKind.expense => expenseColor,
-          null => ink,
-        },
+        color: kind?.color ?? ink,
       ),
     );
   }
@@ -172,15 +181,47 @@ class SectionTitle extends StatelessWidget {
 }
 
 class PaperPanel extends StatelessWidget {
-  const PaperPanel({super.key, required this.child});
+  const PaperPanel({
+    super.key,
+    required this.child,
+    this.color = surface,
+    this.raised = false,
+  });
   final Widget child;
+  final Color color;
+  final bool raised;
 
   @override
-  Widget build(BuildContext context) => Material(
-    color: surface,
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-    child: Padding(padding: const EdgeInsets.all(16), child: child),
-  );
+  Widget build(BuildContext context) {
+    final radius = BorderRadius.circular(16);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        boxShadow: raised
+            ? const [
+                BoxShadow(
+                  color: Color(0x14264D77),
+                  offset: Offset(0, 4),
+                  blurRadius: 12,
+                ),
+              ]
+            : null,
+      ),
+      child: Material(
+        color: color,
+        shape: RoundedRectangleBorder(borderRadius: radius),
+        child: Ink(
+          decoration: raised
+              ? BoxDecoration(
+                  borderRadius: radius,
+                  border: Border.all(color: const Color(0xD9FFFFFF)),
+                )
+              : null,
+          child: Padding(padding: const EdgeInsets.all(16), child: child),
+        ),
+      ),
+    );
+  }
 }
 
 class SlidingSegments<T> extends StatelessWidget {
@@ -201,6 +242,7 @@ class SlidingSegments<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     final count = values.length;
     final selectedIndex = values.indexOf(selected);
+    final selectedKind = selected is EntryKind ? selected as EntryKind : null;
     return Material(
       color: controlTrack,
       borderRadius: BorderRadius.circular(12),
@@ -222,8 +264,20 @@ class SlidingSegments<T> extends StatelessWidget {
                   heightFactor: 1,
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: surface,
+                      color: selectedKind == null
+                          ? surface
+                          : Color.alphaBlend(
+                              selectedKind.color.withValues(alpha: 0.10),
+                              surface,
+                            ),
                       borderRadius: BorderRadius.circular(8),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x16204770),
+                          offset: Offset(0, 1),
+                          blurRadius: 3,
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -251,7 +305,13 @@ class SlidingSegments<T> extends StatelessWidget {
                               label(value),
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: value == selected ? accent : mutedInk,
+                                color: onChanged == null
+                                    ? mutedInk
+                                    : value is EntryKind
+                                    ? value.color
+                                    : value == selected
+                                    ? accent
+                                    : mutedInk,
                                 fontWeight: value == selected
                                     ? FontWeight.w600
                                     : FontWeight.w400,
@@ -275,56 +335,54 @@ class SlidingEntryContent extends StatelessWidget {
   const SlidingEntryContent({
     super.key,
     required this.kind,
-    required this.child,
+    required this.builder,
   });
   final EntryKind kind;
-  final Widget child;
+  final Widget Function(EntryKind) builder;
 
   @override
   Widget build(BuildContext context) {
-    final duration = motion(context, 180);
-    if (duration == Duration.zero) return child;
+    final duration = motion(context, 240);
+    if (duration == Duration.zero) return builder(kind);
+    final panels = {for (final side in EntryKind.values) side: builder(side)};
     return ClipRect(
-      child: AnimatedSwitcher(
+      child: AnimatedSize(
         duration: duration,
-        switchInCurve: Curves.easeOutCubic,
-        switchOutCurve: Curves.easeOutCubic,
-        layoutBuilder: (current, previous) => Stack(
-          alignment: Alignment.topCenter,
-          children: [
-            for (final item in previous)
-              Positioned.fill(
-                child: IgnorePointer(
-                  child: ExcludeSemantics(
-                    child: OverflowBox(
+        curve: Curves.easeInOutCubic,
+        alignment: Alignment.topCenter,
+        child: TweenAnimationBuilder<double>(
+          tween: Tween(end: kind.index.toDouble()),
+          duration: duration,
+          curve: Curves.easeInOutCubic,
+          builder: (context, position, _) => Stack(
+            clipBehavior: Clip.none,
+            children: [
+              for (final side in EntryKind.values)
+                Offstage(
+                  offstage: side != kind && position == kind.index,
+                  child: FractionalTranslation(
+                    translation: Offset(side.index - position, 0),
+                    child: Align(
                       alignment: Alignment.topCenter,
-                      minHeight: 0,
-                      maxHeight: double.infinity,
-                      child: item,
+                      heightFactor: side == kind ? 1 : 0,
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: ExcludeFocus(
+                          excluding: side != kind,
+                          child: ExcludeSemantics(
+                            excluding: side != kind,
+                            child: IgnorePointer(
+                              ignoring: side != kind,
+                              child: panels[side],
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
-              ),
-            if (current != null) current,
-          ],
-        ),
-        transitionBuilder: (child, animation) {
-          final enteringKind = (child.key! as ValueKey<EntryKind>).value;
-          final offset = enteringKind == EntryKind.income ? -0.24 : 0.24;
-          return FadeTransition(
-            opacity: animation,
-            child: SlideTransition(
-              position: animation.drive(
-                Tween(begin: Offset(offset, 0), end: Offset.zero),
-              ),
-              child: child,
-            ),
-          );
-        },
-        child: SizedBox(
-          key: ValueKey(kind),
-          width: double.infinity,
-          child: child,
+            ],
+          ),
         ),
       ),
     );

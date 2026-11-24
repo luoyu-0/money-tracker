@@ -106,9 +106,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
             final (current, prior, entries, priorEntries) = snapshot.data!;
             final total = Totals(entries);
             final past = Totals(priorEntries);
-            final categories = breakdown == EntryKind.income
-                ? total.incomeCategories
-                : total.expenseCategories;
             final duration = motion(context, 210);
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -149,15 +146,23 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 PaperPanel(
                   child: SlidingEntryContent(
                     kind: breakdown,
-                    child: categories.isEmpty
-                        ? Text('这一时段还没有${breakdown.label}')
-                        : _Breakdown(values: categories, duration: duration),
+                    builder: (side) {
+                      final values = side == EntryKind.income
+                          ? total.incomeCategories
+                          : total.expenseCategories;
+                      return values.isEmpty
+                          ? Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 24),
+                              child: Text('这一时段还没有${side.label}'),
+                            )
+                          : _Breakdown(values: values, duration: duration);
+                    },
                   ),
                 ),
                 const SectionTitle('时段对比'),
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: OutlinedButton.icon(
+                  child: FilledButton.tonalIcon(
                     onPressed: () async {
                       final picked = await choosePeriod(
                         context,
@@ -185,50 +190,14 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                     ),
                   ),
                 const SizedBox(height: 8),
-                PaperPanel(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text('当前  ${current.label}'),
-                      Text('对比  ${prior.label}'),
-                      const SizedBox(height: 12),
-                      _Bars(
-                        groups: [
-                          [total.income, past.income],
-                          [total.expense, past.expense],
-                        ],
-                        labels: const ['收入', '支出'],
-                        colors: const [accent, Color(0xFFA5BED8)],
-                        duration: duration,
-                      ),
-                      Text('收入  ${yuan(total.income)} / ${yuan(past.income)}'),
-                      Text(
-                        '支出  ${yuan(total.expense)} / ${yuan(past.expense)}',
-                      ),
-                    ],
-                  ),
+                _PeriodComparison(
+                  current: current,
+                  prior: prior,
+                  total: total,
+                  past: past,
                 ),
-                const SectionTitle('收支对比'),
-                PaperPanel(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _Bars(
-                        groups: [
-                          [total.income],
-                          [total.expense],
-                        ],
-                        labels: const ['收入', '支出'],
-                        colors: const [incomeColor, expenseColor],
-                        duration: duration,
-                        colorByGroup: true,
-                      ),
-                      Text(
-                        '收入 ${yuan(total.income)}，支出 ${yuan(total.expense)}',
-                      ),
-                    ],
-                  ),
-                ),
+                const SectionTitle('本时段收支'),
+                _CurrentComparison(period: current, totals: total),
                 const SizedBox(height: 24),
                 FilledButton.tonalIcon(
                   onPressed: () => widget.openAnalysis(current.end),
@@ -258,67 +227,61 @@ class SummaryPanel extends StatelessWidget {
   final bool showMonthlyChange;
 
   @override
-  Widget build(BuildContext context) => Material(
+  Widget build(BuildContext context) => PaperPanel(
     color: blueTint,
-    borderRadius: BorderRadius.circular(16),
-    child: Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(color: mutedInk)),
-          const SizedBox(height: 4),
-          Row(
-            children: [
+    raised: true,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(color: mutedInk)),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            Expanded(
+              child: MoneyText(
+                totals.net,
+                large: true,
+                alignment: TextAlign.start,
+              ),
+            ),
+            if (showMonthlyChange) ...[
+              const SizedBox(width: 8),
               Expanded(
-                child: MoneyText(
-                  totals.net,
-                  large: true,
-                  alignment: TextAlign.start,
+                child: _MonthlyChange(current: totals.net, previous: priorNet),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 12),
+        const Divider(height: 1),
+        const SizedBox(height: 12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final (kind, value) in [
+              (EntryKind.income, totals.income),
+              (EntryKind.expense, totals.expense),
+            ])
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: kind == EntryKind.income
+                      ? CrossAxisAlignment.start
+                      : CrossAxisAlignment.end,
+                  children: [
+                    Text(kind.label, style: TextStyle(color: kind.color)),
+                    MoneyText(
+                      value,
+                      kind: kind,
+                      alignment: kind == EntryKind.income
+                          ? TextAlign.start
+                          : TextAlign.end,
+                    ),
+                  ],
                 ),
               ),
-              if (showMonthlyChange) ...[
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _MonthlyChange(
-                    current: totals.net,
-                    previous: priorNet,
-                  ),
-                ),
-              ],
-            ],
-          ),
-          const SizedBox(height: 12),
-          const Divider(height: 1),
-          const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              for (final (kind, value) in [
-                (EntryKind.income, totals.income),
-                (EntryKind.expense, totals.expense),
-              ])
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: kind == EntryKind.income
-                        ? CrossAxisAlignment.start
-                        : CrossAxisAlignment.end,
-                    children: [
-                      Text(kind.label),
-                      MoneyText(
-                        value,
-                        kind: kind,
-                        alignment: kind == EntryKind.income
-                            ? TextAlign.start
-                            : TextAlign.end,
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
+          ],
+        ),
+      ],
     ),
   );
 }
@@ -426,7 +389,7 @@ class _Trend extends StatelessWidget {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(width: 14, height: 3, color: trendColor(kind)),
+                    Container(width: 14, height: 3, color: kind.color),
                     const SizedBox(width: 4),
                     Text(kind.label, style: labelStyle),
                   ],
@@ -495,14 +458,14 @@ class _Trend extends StatelessWidget {
                 lineBarsData: [
                   for (final kind in EntryKind.values)
                     LineChartBarData(
-                      color: trendColor(kind),
+                      color: kind.color,
                       barWidth: 2.5,
                       dotData: FlDotData(
                         getDotPainter: (_, _, _, _) => FlDotCirclePainter(
                           radius: 2.5,
                           color: surface,
                           strokeWidth: 1.5,
-                          strokeColor: trendColor(kind),
+                          strokeColor: kind.color,
                         ),
                       ),
                       spots: [
@@ -541,9 +504,6 @@ class _Trend extends StatelessWidget {
     );
   }
 }
-
-Color trendColor(EntryKind kind) =>
-    kind == EntryKind.income ? accent : expenseColor;
 
 double _axisStep(double maximum) {
   if (maximum <= 0) return 1;
@@ -665,66 +625,195 @@ class _Breakdown extends StatelessWidget {
   }
 }
 
-class _Bars extends StatelessWidget {
-  const _Bars({
-    required this.groups,
-    required this.labels,
-    required this.colors,
-    required this.duration,
-    this.colorByGroup = false,
+class _PeriodComparison extends StatelessWidget {
+  const _PeriodComparison({
+    required this.current,
+    required this.prior,
+    required this.total,
+    required this.past,
   });
-  final List<List<int>> groups;
-  final List<String> labels;
-  final List<Color> colors;
-  final Duration duration;
-  final bool colorByGroup;
+
+  final Period current;
+  final Period prior;
+  final Totals total;
+  final Totals past;
 
   @override
-  Widget build(BuildContext context) => ExcludeSemantics(
-    child: SizedBox(
-      height: 126,
-      child: BarChart(
-        BarChartData(
-          gridData: const FlGridData(show: false),
-          maxY:
-              math
-                  .max(1, groups.expand((item) => item).reduce(math.max) / 100)
-                  .toDouble() *
-              1.12,
-          borderData: FlBorderData(show: false),
-          titlesData: const FlTitlesData(show: false),
-          barGroups: [
-            for (var index = 0; index < groups.length; index++)
-              BarChartGroupData(
-                x: index,
-                barRods: [
-                  for (var series = 0; series < groups[index].length; series++)
-                    BarChartRodData(
-                      toY: groups[index][series] / 100,
-                      width: 19,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(4),
-                      ),
-                      color: colors[colorByGroup ? index : series],
-                    ),
-                ],
+  Widget build(BuildContext context) {
+    final maximum = [
+      total.income,
+      total.expense,
+      past.income,
+      past.expense,
+    ].reduce(math.max);
+    return PaperPanel(
+      raised: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _PeriodLabel('当前时段', current),
+          const SizedBox(height: 8),
+          _PeriodLabel('对比时段', prior),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Divider(height: 1),
+          ),
+          for (final (kind, currentValue, priorValue) in [
+            (EntryKind.income, total.income, past.income),
+            (EntryKind.expense, total.expense, past.expense),
+          ]) ...[
+            if (kind == EntryKind.expense)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Divider(height: 1),
               ),
+            Text(
+              kind.label,
+              style: TextStyle(fontWeight: FontWeight.w600, color: kind.color),
+            ),
+            const SizedBox(height: 4),
+            _AmountBar(
+              label: '当前',
+              kind: kind,
+              value: currentValue,
+              maximum: maximum,
+            ),
+            const SizedBox(height: 8),
+            _AmountBar(
+              label: '对比',
+              kind: kind,
+              value: priorValue,
+              maximum: maximum,
+              comparison: true,
+            ),
           ],
-          barTouchData: BarTouchData(
-            touchTooltipData: BarTouchTooltipData(
-              fitInsideHorizontally: true,
-              fitInsideVertically: true,
-              getTooltipItem: (group, groupIndex, rod, rodIndex) =>
-                  BarTooltipItem(
-                    '${labels[groupIndex]} ${yuan((rod.toY * 100).round())}',
-                    const TextStyle(color: Colors.white),
-                  ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CurrentComparison extends StatelessWidget {
+  const _CurrentComparison({required this.period, required this.totals});
+
+  final Period period;
+  final Totals totals;
+
+  @override
+  Widget build(BuildContext context) {
+    final maximum = math.max(totals.income, totals.expense);
+    return PaperPanel(
+      raised: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(period.label, style: const TextStyle(color: mutedInk)),
+          const SizedBox(height: 12),
+          _AmountBar(
+            label: '收入',
+            kind: EntryKind.income,
+            value: totals.income,
+            maximum: maximum,
+          ),
+          const SizedBox(height: 12),
+          _AmountBar(
+            label: '支出',
+            kind: EntryKind.expense,
+            value: totals.expense,
+            maximum: maximum,
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Divider(height: 1),
+          ),
+          Row(
+            children: [
+              const Expanded(child: Text('结余')),
+              Expanded(child: MoneyText(totals.net)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PeriodLabel extends StatelessWidget {
+  const _PeriodLabel(this.label, this.period);
+
+  final String label;
+  final Period period;
+
+  @override
+  Widget build(BuildContext context) => Text.rich(
+    TextSpan(
+      text: '$label  ',
+      style: const TextStyle(fontWeight: FontWeight.w600),
+      children: [
+        TextSpan(
+          text: period.label,
+          style: const TextStyle(color: mutedInk, fontWeight: FontWeight.w400),
+        ),
+      ],
+    ),
+  );
+}
+
+class _AmountBar extends StatelessWidget {
+  const _AmountBar({
+    required this.label,
+    required this.kind,
+    required this.value,
+    required this.maximum,
+    this.comparison = false,
+  });
+
+  final String label;
+  final EntryKind kind;
+  final int value;
+  final int maximum;
+  final bool comparison;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: TextStyle(color: comparison ? mutedInk : kind.color),
+            ),
+          ),
+          Expanded(child: MoneyText(value, kind: kind)),
+        ],
+      ),
+      const SizedBox(height: 4),
+      ExcludeSemantics(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: ColoredBox(
+            color: controlTrack,
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: TweenAnimationBuilder<double>(
+                tween: Tween(end: maximum == 0 ? 0 : value / maximum),
+                duration: motion(context, 180),
+                curve: Curves.easeOutCubic,
+                builder: (context, fraction, mark) =>
+                    FractionallySizedBox(widthFactor: fraction, child: mark),
+                child: ColoredBox(
+                  color: comparison
+                      ? kind.color.withValues(alpha: .42)
+                      : kind.color,
+                  child: SizedBox(height: comparison ? 5 : 8),
+                ),
+              ),
             ),
           ),
         ),
-        duration: duration,
-        curve: Curves.easeOutCubic,
       ),
-    ),
+    ],
   );
 }
