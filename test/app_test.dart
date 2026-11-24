@@ -9,6 +9,7 @@ import 'package:money_tracker/ui.dart';
 import 'package:money_tracker/ledger.dart';
 import 'package:money_tracker/ledger_store.dart';
 import 'package:money_tracker/main.dart';
+import 'package:money_tracker/statistics_screen.dart';
 import 'package:sqflite/sqflite.dart';
 
 class _UnusedDatabase extends Fake implements Database {}
@@ -17,9 +18,34 @@ class _TestStore extends LedgerStore {
   _TestStore() : super(_UnusedDatabase());
   final records = <String, Entry>{};
   final custom = <EntryOption>[];
+  final entryQueries = <(Period?, int?)>[];
+  int overviewRequests = 0;
+
+  @override
+  Future<({int income, int expense, int priorNet})> overview(
+    DateTime date,
+  ) async {
+    overviewRequests++;
+    final current = PeriodKind.month.ranges(date).$1;
+    final prior = Period(
+      DateTime(date.year, date.month - 1),
+      DateTime(date.year, date.month, 0),
+    );
+    final totals = Totals(
+      records.values.where((entry) => current.contains(entry.date)),
+    );
+    return (
+      income: totals.income,
+      expense: totals.expense,
+      priorNet: Totals(
+        records.values.where((entry) => prior.contains(entry.date)),
+      ).net,
+    );
+  }
 
   @override
   Future<List<Entry>> entries([Period? period, int? limit]) async {
+    entryQueries.add((period, limit));
     final values = records.values.where(
       (item) => period?.contains(item.date) ?? true,
     );
@@ -105,6 +131,28 @@ void testStableSegments<T>(
 }
 
 void main() {
+  testWidgets('冷启动只读取一次总览和首批账目，合计包含后续账目', (tester) async {
+    final store = _TestStore();
+    final date = day(DateTime.now());
+    for (var index = 0; index < 80; index++) {
+      await store.saveEntry(
+        Entry(
+          id: newId(),
+          kind: EntryKind.income,
+          cents: 100,
+          category: '工资',
+          date: date,
+        ),
+      );
+    }
+    await tester.pumpWidget(MoneyTrackerApp(openStore: () async => store));
+    await tester.pumpAndSettle();
+    expect(store.overviewRequests, 1);
+    expect(store.entryQueries, [(null, 61)]);
+    final summary = tester.widget<SummaryPanel>(find.byType(SummaryPanel));
+    expect(summary.income, 8000);
+  });
+
   testStableSegments('收支切换', EntryKind.values, (kind) => kind.label);
   testStableSegments('周期切换', PeriodKind.values, (kind) => kind.label);
 

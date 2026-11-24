@@ -46,6 +46,32 @@ class LedgerStore {
         limit: limit,
       )).map(Entry.fromMap).toList();
 
+  Future<({int income, int expense, int priorNet})> overview(
+    DateTime date,
+  ) async {
+    final currentStart = dayKey(DateTime(date.year, date.month));
+    final priorStart = dayKey(DateTime(date.year, date.month - 1));
+    final rows = await db.rawQuery(
+      '''
+      SELECT
+        COALESCE(SUM(CASE WHEN date >= ? AND kind = 'income' THEN cents END), 0) AS income,
+        COALESCE(SUM(CASE WHEN date >= ? AND kind = 'expense' THEN cents END), 0) AS expense,
+        COALESCE(SUM(CASE WHEN date < ?
+          THEN CASE kind WHEN 'income' THEN cents WHEN 'expense' THEN -cents END
+        END), 0) AS priorNet
+      FROM entries
+      WHERE date BETWEEN ? AND ?
+      ''',
+      [currentStart, currentStart, currentStart, priorStart, dayKey(date)],
+    );
+    final row = rows.single;
+    return (
+      income: row['income'] as int,
+      expense: row['expense'] as int,
+      priorNet: row['priorNet'] as int,
+    );
+  }
+
   Future<void> saveEntry(Entry entry) async {
     await db.insert(
       'entries',

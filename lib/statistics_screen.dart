@@ -109,7 +109,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   child: loading ? const LinearProgressIndicator() : null,
                 ),
                 const SizedBox(height: 12),
-                SummaryPanel(total),
+                SummaryPanel(income: total.income, expense: total.expense),
                 const SectionTitle('收支趋势'),
                 if (entries.isEmpty)
                   const PaperPanel(child: Text('这一时段还没有账目。'))
@@ -208,14 +208,16 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 }
 
 class SummaryPanel extends StatelessWidget {
-  const SummaryPanel(
-    this.totals, {
+  const SummaryPanel({
     super.key,
+    required this.income,
+    required this.expense,
     this.label = '结余',
     this.priorNet,
     this.showMonthlyChange = false,
   });
-  final Totals totals;
+  final int income;
+  final int expense;
   final String label;
   final int? priorNet;
   final bool showMonthlyChange;
@@ -233,7 +235,7 @@ class SummaryPanel extends StatelessWidget {
           children: [
             Expanded(
               child: MoneyText(
-                totals.net,
+                income - expense,
                 large: true,
                 alignment: TextAlign.start,
               ),
@@ -241,7 +243,10 @@ class SummaryPanel extends StatelessWidget {
             if (showMonthlyChange) ...[
               const SizedBox(width: 8),
               Expanded(
-                child: _MonthlyChange(current: totals.net, previous: priorNet),
+                child: _MonthlyChange(
+                  current: income - expense,
+                  previous: priorNet,
+                ),
               ),
             ],
           ],
@@ -253,8 +258,8 @@ class SummaryPanel extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             for (final (kind, value) in [
-              (EntryKind.income, totals.income),
-              (EntryKind.expense, totals.expense),
+              (EntryKind.income, income),
+              (EntryKind.expense, expense),
             ])
               Expanded(
                 child: Column(

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -25,7 +27,12 @@ class MoneyTrackerApp extends StatefulWidget {
 }
 
 class _MoneyTrackerAppState extends State<MoneyTrackerApp> {
-  late Future<LedgerStore> opening = widget.openStore();
+  late Future<(LedgerStore, _LedgerSnapshot)> opening = openLedger();
+
+  Future<(LedgerStore, _LedgerSnapshot)> openLedger() async {
+    final store = await widget.openStore();
+    return (store, await _readLedger(store, _ledgerPageSize));
+  }
 
   @override
   Widget build(BuildContext context) => MaterialApp(
@@ -35,10 +42,12 @@ class _MoneyTrackerAppState extends State<MoneyTrackerApp> {
     locale: const Locale('zh', 'CN'),
     supportedLocales: const [Locale('zh', 'CN')],
     localizationsDelegates: GlobalMaterialLocalizations.delegates,
-    home: FutureBuilder<LedgerStore>(
+    home: FutureBuilder<(LedgerStore, _LedgerSnapshot)>(
       future: opening,
       builder: (context, snapshot) {
-        if (snapshot.hasData) return _Home(store: snapshot.data!);
+        if (snapshot.data case (final store, final ledger)) {
+          return _Home(store: store, initialLedger: ledger);
+        }
         if (snapshot.hasError)
           return Scaffold(
             body: Center(
@@ -47,17 +56,22 @@ class _MoneyTrackerAppState extends State<MoneyTrackerApp> {
                 children: [
                   const Text('无法打开本机账本'),
                   TextButton(
-                    onPressed: () =>
-                        setState(() => opening = widget.openStore()),
+                    onPressed: () => setState(() => opening = openLedger()),
                     child: const Text('重试'),
                   ),
                 ],
               ),
             ),
           );
-        return const Scaffold(
-          body: Center(
-            child: CircularProgressIndicator(semanticsLabel: '正在打开账本'),
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text(
+              '账本',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          body: const Center(
+            child: Text('正在读取账本', style: TextStyle(color: mutedInk)),
           ),
         );
       },
@@ -66,8 +80,9 @@ class _MoneyTrackerAppState extends State<MoneyTrackerApp> {
 }
 
 class _Home extends StatefulWidget {
-  const _Home({required this.store});
+  const _Home({required this.store, required this.initialLedger});
   final LedgerStore store;
+  final _LedgerSnapshot initialLedger;
 
   @override
   State<_Home> createState() => _HomeState();
@@ -144,6 +159,7 @@ class _HomeState extends State<_Home> {
           _PreservedPage(
             child: _LedgerScreen(
               store: widget.store,
+              initial: widget.initialLedger,
               revision: revision,
               highlighted: highlighted,
               edit: record,
@@ -224,14 +240,38 @@ class _PreservedPageState extends State<_PreservedPage>
   }
 }
 
+const _ledgerPageSize = 60;
+
+typedef _LedgerSnapshot = ({
+  int income,
+  int expense,
+  int priorNet,
+  List<Entry> records,
+});
+
+Future<_LedgerSnapshot> _readLedger(LedgerStore store, int limit) async {
+  final (overview, records) = await (
+    store.overview(DateTime.now()),
+    store.entries(null, limit + 1),
+  ).wait;
+  return (
+    income: overview.income,
+    expense: overview.expense,
+    priorNet: overview.priorNet,
+    records: records,
+  );
+}
+
 class _LedgerScreen extends StatefulWidget {
   const _LedgerScreen({
     required this.store,
+    required this.initial,
     required this.revision,
     required this.highlighted,
     required this.edit,
   });
   final LedgerStore store;
+  final _LedgerSnapshot initial;
   final int revision;
   final String? highlighted;
   final void Function([Entry?]) edit;
@@ -241,28 +281,10 @@ class _LedgerScreen extends StatefulWidget {
 }
 
 class _LedgerScreenState extends State<_LedgerScreen> {
-  int limit = 60;
-  late Future<(Totals, int?, List<Entry>)> query = load();
+  int limit = _ledgerPageSize;
+  Future<_LedgerSnapshot>? query;
 
-  Future<(Totals, int?, List<Entry>)> load() async {
-    final now = DateTime.now();
-    final results = await Future.wait([
-      widget.store.entries(PeriodKind.month.ranges(now).$1),
-      widget.store.entries(
-        Period(
-          DateTime(now.year, now.month - 1),
-          DateTime(now.year, now.month, 0),
-        ),
-      ),
-      widget.store.entries(null, limit + 1),
-    ]);
-    final priorEntries = results[1];
-    return (
-      Totals(results[0]),
-      priorEntries.isEmpty ? null : Totals(priorEntries).net,
-      results[2],
-    );
-  }
+  Future<_LedgerSnapshot> load() => _readLedger(widget.store, limit);
 
   @override
   void didUpdateWidget(covariant _LedgerScreen oldWidget) {
@@ -271,10 +293,9 @@ class _LedgerScreenState extends State<_LedgerScreen> {
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) => FutureBuilder<(Totals, int?, List<Entry>)>(
+  Widget build(BuildContext context) => FutureBuilder<_LedgerSnapshot>(
     future: query,
+    initialData: widget.initial,
     builder: (context, snapshot) {
       if (!snapshot.hasData)
         return Center(
@@ -285,7 +306,7 @@ class _LedgerScreenState extends State<_LedgerScreen> {
                 )
               : const CircularProgressIndicator(semanticsLabel: '正在读取账本'),
         );
-      final (totals, priorNet, records) = snapshot.data!;
+      final (:income, :expense, :priorNet, :records) = snapshot.data!;
       final count = records.length > limit ? limit : records.length;
       final now = DateTime.now();
       return ListView.builder(
@@ -297,7 +318,8 @@ class _LedgerScreenState extends State<_LedgerScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 SummaryPanel(
-                  totals,
+                  income: income,
+                  expense: expense,
                   label: '${now.month} 月结余',
                   priorNet: priorNet,
                   showMonthlyChange: true,
@@ -327,7 +349,7 @@ class _LedgerScreenState extends State<_LedgerScreen> {
             return records.length > limit
                 ? TextButton(
                     onPressed: () => setState(() {
-                      limit += 60;
+                      limit += _ledgerPageSize;
                       query = load();
                     }),
                     child: const Text('加载更多账目'),
