@@ -8,6 +8,7 @@ const ink = Color(0xFF172B42);
 const mutedInk = Color(0xFF51657D);
 const accent = Color(0xFF215BA5);
 const blueTint = Color(0xFFE0EEFF);
+const selectedTint = Color(0xFFC3DAF8);
 const controlTrack = Color(0xFFEAF2FC);
 const incomeColor = Color(0xFF216B54);
 const expenseColor = Color(0xFFAA4C41);
@@ -288,16 +289,12 @@ class SlidingSegments<T> extends StatelessWidget {
                     selected: value == selected,
                     child: InkWell(
                       onTap: onChanged == null ? null : () => onChanged!(value),
-                      splashFactory: isEntrySwitch
-                          ? NoSplash.splashFactory
-                          : null,
-                      overlayColor: isEntrySwitch
-                          ? WidgetStateProperty.resolveWith(
-                              (states) => states.contains(WidgetState.pressed)
-                                  ? Colors.transparent
-                                  : null,
-                            )
-                          : null,
+                      splashFactory: NoSplash.splashFactory,
+                      overlayColor: WidgetStateProperty.resolveWith(
+                        (states) => states.contains(WidgetState.pressed)
+                            ? Colors.transparent
+                            : null,
+                      ),
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(minHeight: 48),
                         child: Padding(
@@ -314,14 +311,8 @@ class SlidingSegments<T> extends StatelessWidget {
                                     ? mutedInk
                                     : value is EntryKind
                                     ? value.color
-                                    : value == selected
-                                    ? accent
-                                    : mutedInk,
-                                fontWeight: isEntrySwitch
-                                    ? FontWeight.w500
-                                    : value == selected
-                                    ? FontWeight.w600
-                                    : FontWeight.w400,
+                                    : ink,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ),

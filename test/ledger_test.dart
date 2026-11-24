@@ -45,12 +45,6 @@ void main() {
     expect(lastYear.label, '2025-12-01 至 2025-12-10');
   });
 
-  test('自定义时段按日期计算紧接的前一个等长区间', () {
-    final period = Period(DateTime(2026, 1, 1), DateTime(2026, 1, 10));
-    expect(period.preceding.label, '2025-12-22 至 2025-12-31');
-    expect(period.length, period.preceding.length);
-  });
-
   test('统计区分同名收支分类，模型汇总不含交易对方', () {
     final income = Entry(
       id: newId(),

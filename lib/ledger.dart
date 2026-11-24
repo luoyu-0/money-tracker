@@ -128,14 +128,12 @@ class Period {
 
   String get label => '${dayKey(start)} 至 ${dayKey(end)}';
   bool contains(DateTime date) => !date.isBefore(start) && !date.isAfter(end);
-  Period get preceding => Period(day(start, -length), day(start, -1));
 }
 
 enum PeriodKind {
   week('本周'),
   month('本月'),
-  year('本年'),
-  custom('自定义');
+  year('本年');
 
   const PeriodKind(this.label);
   final String label;
@@ -158,7 +156,6 @@ enum PeriodKind {
         DateTime(today.year - 1),
         DateTime(today.year, 1, 0),
       ),
-      custom => throw StateError('自定义范围需要指定日期'),
     };
     final current = Period(start, today);
     final matchingEnd = day(previous, current.length - 1);

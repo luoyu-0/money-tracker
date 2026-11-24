@@ -24,16 +24,13 @@ class StatisticsScreen extends StatefulWidget {
 
 class _StatisticsScreenState extends State<StatisticsScreen> {
   PeriodKind kind = PeriodKind.month;
-  Period? custom;
   Period? comparison;
   EntryKind breakdown = EntryKind.expense;
   late (Period, Period) ranges = computeRanges();
   late Future<(Period, Period, List<Entry>, List<Entry>)> query = load();
 
   (Period, Period) computeRanges() {
-    final (current, prior) = kind == PeriodKind.custom
-        ? (custom!, custom!.preceding)
-        : kind.ranges(DateTime.now());
+    final (current, prior) = kind.ranges(DateTime.now());
     return (current, comparison ?? prior);
   }
 
@@ -57,14 +54,10 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     if (oldWidget.revision != widget.revision) refresh();
   }
 
-  Future<void> select(PeriodKind next) async {
-    final selected = next == PeriodKind.custom
-        ? await choosePeriod(context, custom ?? ranges.$1)
-        : null;
-    if (!mounted || (next == PeriodKind.custom && selected == null)) return;
+  void select(PeriodKind next) {
+    if (next == kind) return;
     setState(() {
       kind = next;
-      custom = selected ?? custom;
       comparison = null;
       refresh();
     });
@@ -123,6 +116,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 else
                   PaperPanel(
                     child: _Trend(
+                      key: ValueKey((current.start, current.end)),
                       entries: entries,
                       totals: total,
                       period: current,
@@ -346,6 +340,7 @@ class _MonthlyChange extends StatelessWidget {
 
 class _Trend extends StatelessWidget {
   const _Trend({
+    super.key,
     required this.entries,
     required this.totals,
     required this.period,

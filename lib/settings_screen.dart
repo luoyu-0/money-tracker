@@ -311,23 +311,55 @@ class _AiConfigScreenState extends State<_AiConfigScreen> {
       child: ListView(
         padding: const EdgeInsets.all(20),
         children: [
-          DropdownButtonFormField<ModelProvider>(
-            initialValue: provider,
-            decoration: const InputDecoration(labelText: '服务商'),
-            items: [
+          DropdownMenu<ModelProvider>(
+            initialSelection: provider,
+            label: const Text('服务商'),
+            expandedInsets: EdgeInsets.zero,
+            selectOnly: true,
+            enableSearch: false,
+            enabled: !saving,
+            alignmentOffset: const Offset(0, 6),
+            menuStyle: MenuStyle(
+              backgroundColor: const WidgetStatePropertyAll(surface),
+              surfaceTintColor: const WidgetStatePropertyAll(
+                Colors.transparent,
+              ),
+              shadowColor: const WidgetStatePropertyAll(Color(0x30204770)),
+              elevation: const WidgetStatePropertyAll(3),
+              padding: const WidgetStatePropertyAll(EdgeInsets.all(6)),
+              shape: WidgetStatePropertyAll(
+                RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: rule),
+                ),
+              ),
+            ),
+            dropdownMenuEntries: [
               for (final item in providers)
-                DropdownMenuItem(value: item, child: Text(item.label)),
+                DropdownMenuEntry(
+                  value: item,
+                  label: item.label,
+                  style: MenuItemButton.styleFrom(
+                    minimumSize: const Size(48, 48),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    backgroundColor: item == provider ? blueTint : null,
+                    foregroundColor: item == provider ? accent : ink,
+                  ),
+                ),
             ],
-            onChanged: saving
-                ? null
-                : (value) => setState(() {
-                    provider = value!;
-                    key.clear();
-                    model.text = hasSavedKey
-                        ? widget.current!.model
-                        : provider.defaultModel;
-                    host.text = hasSavedKey ? widget.current!.host : '';
-                  }),
+            onSelected: (value) {
+              if (value == null || value == provider) return;
+              setState(() {
+                provider = value;
+                key.clear();
+                model.text = hasSavedKey
+                    ? widget.current!.model
+                    : provider.defaultModel;
+                host.text = hasSavedKey ? widget.current!.host : '';
+              });
+            },
           ),
           const SizedBox(height: 14),
           TextFormField(

@@ -325,7 +325,7 @@ class _MonthButton extends StatelessWidget {
           padding: EdgeInsets.zero,
           shape: const CircleBorder(),
           foregroundColor: selected ? accent : ink,
-          backgroundColor: selected ? blueTint : controlTrack,
+          backgroundColor: selected ? selectedTint : controlTrack,
           disabledBackgroundColor: Colors.transparent,
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         ),

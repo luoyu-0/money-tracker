@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:money_tracker/ai/config.dart';
+import 'package:money_tracker/ai/provider.dart';
 import 'package:money_tracker/analysis_screen.dart';
 import 'package:money_tracker/ui.dart';
 import 'package:money_tracker/ledger.dart';
@@ -41,19 +42,23 @@ class _TestStore extends LedgerStore {
   Future<Report?> report(String month) async => null;
 }
 
-void main() {
-  testWidgets('收支切换只移动滑块，文字和底色在转场中保持稳定', (tester) async {
-    var selection = EntryKind.income;
+void testStableSegments<T>(
+  String name,
+  List<T> values,
+  String Function(T) labelText,
+) {
+  testWidgets('$name只移动滑块，文字和底色在转场中保持稳定', (tester) async {
+    var selection = values.first;
     await tester.pumpWidget(
       MaterialApp(
         home: StatefulBuilder(
           builder: (context, setState) => Center(
             child: SizedBox(
               width: 200,
-              child: SlidingSegments<EntryKind>(
-                values: EntryKind.values,
+              child: SlidingSegments<T>(
+                values: values,
                 selected: selection,
-                label: (kind) => kind.label,
+                label: labelText,
                 onChanged: (kind) => setState(() => selection = kind),
               ),
             ),
@@ -61,22 +66,22 @@ void main() {
         ),
       ),
     );
-    final income = find.text('收入');
-    final expense = find.text('支出');
+    final first = find.text(labelText(values.first));
+    final second = find.text(labelText(values[1]));
     final indicator = find.descendant(
       of: find.byType(AnimatedAlign),
       matching: find.byType(DecoratedBox),
     );
     final labelsBefore = [
-      for (final label in [income, expense]) tester.widget<Text>(label).style,
+      for (final label in [first, second]) tester.widget<Text>(label).style,
     ];
     final fillBefore = tester.widget<DecoratedBox>(indicator).decoration;
     final sliderBefore = tester.getCenter(indicator).dx;
-    await tester.tap(expense);
+    await tester.tap(second);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 120));
     expect([
-      for (final label in [income, expense]) tester.widget<Text>(label).style,
+      for (final label in [first, second]) tester.widget<Text>(label).style,
     ], labelsBefore);
     expect(tester.widget<DecoratedBox>(indicator).decoration, fillBefore);
     final sliderDuring = tester.getCenter(indicator).dx;
@@ -89,13 +94,53 @@ void main() {
       ),
     );
     final button = tester.widget<InkWell>(
-      find.ancestor(of: expense, matching: find.byType(InkWell)),
+      find.ancestor(of: second, matching: find.byType(InkWell)),
     );
     expect(button.splashFactory, NoSplash.splashFactory);
     expect(
       button.overlayColor!.resolve({WidgetState.pressed}),
       Colors.transparent,
     );
+  });
+}
+
+void main() {
+  testStableSegments('收支切换', EntryKind.values, (kind) => kind.label);
+  testStableSegments('周期切换', PeriodKind.values, (kind) => kind.label);
+
+  testWidgets('服务商菜单锚定字段，选中后更新模型 ID 和地区配置', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    FlutterSecureStorage.setMockInitialValues({});
+    final store = _TestStore();
+    await tester.pumpWidget(MoneyTrackerApp(openStore: () async => store));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(NavigationDestination, '设置'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('模型服务配置'));
+    await tester.pumpAndSettle();
+    final field = find.byType(DropdownMenu<ModelProvider>);
+    await tester.tap(field);
+    await tester.pumpAndSettle();
+    final selected = find.widgetWithText(MenuItemButton, 'DeepSeek');
+    final qwen = find.widgetWithText(MenuItemButton, '通义千问');
+    final anchor = tester.getRect(field);
+    final option = tester.getRect(selected);
+    expect(option.top, greaterThanOrEqualTo(anchor.bottom));
+    expect(option.left, greaterThanOrEqualTo(anchor.left));
+    expect(
+      tester
+          .widget<MenuItemButton>(selected)
+          .style
+          ?.backgroundColor
+          ?.resolve({}),
+      blueTint,
+    );
+    await tester.tap(qwen);
+    await tester.pumpAndSettle();
+    expect(find.text('qwen-plus'), findsOneWidget);
+    expect(find.text('百炼 API Host（可选）'), findsOneWidget);
+    expect(qwen, findsNothing);
   });
 
   testWidgets('分类滑动时两组内容相邻，容器高度连续变化', (tester) async {
@@ -173,6 +218,19 @@ void main() {
       expect(points[index].dy, closeTo(points[index ~/ 4 * 4].dy, 0.5));
     }
     final december = find.widgetWithText(TextButton, '12');
+    final current = find.widgetWithText(TextButton, '${today.month}');
+    final unselected = find.widgetWithText(
+      TextButton,
+      '${today.month == 1 ? 2 : 1}',
+    );
+    expect(
+      tester.widget<TextButton>(current).style?.backgroundColor?.resolve({}),
+      selectedTint,
+    );
+    expect(
+      tester.widget<TextButton>(unselected).style?.backgroundColor?.resolve({}),
+      controlTrack,
+    );
     expect(
       tester.widget<TextButton>(december).onPressed == null,
       today.month < 12,
@@ -232,6 +290,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('收支趋势'), findsOneWidget);
     expect(find.text('本月'), findsOneWidget);
+    expect(find.text('自定义'), findsNothing);
     await tester.tap(find.widgetWithText(NavigationDestination, '设置'));
     await tester.pumpAndSettle();
     expect(find.text('创建整本备份'), findsOneWidget);
