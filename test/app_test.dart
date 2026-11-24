@@ -42,6 +42,62 @@ class _TestStore extends LedgerStore {
 }
 
 void main() {
+  testWidgets('收支切换只移动滑块，文字和底色在转场中保持稳定', (tester) async {
+    var selection = EntryKind.income;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setState) => Center(
+            child: SizedBox(
+              width: 200,
+              child: SlidingSegments<EntryKind>(
+                values: EntryKind.values,
+                selected: selection,
+                label: (kind) => kind.label,
+                onChanged: (kind) => setState(() => selection = kind),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final income = find.text('收入');
+    final expense = find.text('支出');
+    final indicator = find.descendant(
+      of: find.byType(AnimatedAlign),
+      matching: find.byType(DecoratedBox),
+    );
+    final labelsBefore = [
+      for (final label in [income, expense]) tester.widget<Text>(label).style,
+    ];
+    final fillBefore = tester.widget<DecoratedBox>(indicator).decoration;
+    final sliderBefore = tester.getCenter(indicator).dx;
+    await tester.tap(expense);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 120));
+    expect([
+      for (final label in [income, expense]) tester.widget<Text>(label).style,
+    ], labelsBefore);
+    expect(tester.widget<DecoratedBox>(indicator).decoration, fillBefore);
+    final sliderDuring = tester.getCenter(indicator).dx;
+    await tester.pumpAndSettle();
+    expect(
+      sliderDuring,
+      allOf(
+        greaterThan(sliderBefore),
+        lessThan(tester.getCenter(indicator).dx),
+      ),
+    );
+    final button = tester.widget<InkWell>(
+      find.ancestor(of: expense, matching: find.byType(InkWell)),
+    );
+    expect(button.splashFactory, NoSplash.splashFactory);
+    expect(
+      button.overlayColor!.resolve({WidgetState.pressed}),
+      Colors.transparent,
+    );
+  });
+
   testWidgets('分类滑动时两组内容相邻，容器高度连续变化', (tester) async {
     late StateSetter change;
     var kind = EntryKind.expense;

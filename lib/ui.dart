@@ -242,7 +242,7 @@ class SlidingSegments<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     final count = values.length;
     final selectedIndex = values.indexOf(selected);
-    final selectedKind = selected is EntryKind ? selected as EntryKind : null;
+    final isEntrySwitch = selected is EntryKind;
     return Material(
       color: controlTrack,
       borderRadius: BorderRadius.circular(12),
@@ -253,8 +253,8 @@ class SlidingSegments<T> extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.all(4),
               child: AnimatedAlign(
-                duration: motion(context, 180),
-                curve: Curves.easeOutCubic,
+                duration: motion(context, isEntrySwitch ? _entrySlideMs : 180),
+                curve: isEntrySwitch ? _entrySlideCurve : Curves.easeOutCubic,
                 alignment: Alignment(
                   count == 1 ? 0 : 2 * selectedIndex / (count - 1) - 1,
                   0,
@@ -264,12 +264,7 @@ class SlidingSegments<T> extends StatelessWidget {
                   heightFactor: 1,
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      color: selectedKind == null
-                          ? surface
-                          : Color.alphaBlend(
-                              selectedKind.color.withValues(alpha: 0.10),
-                              surface,
-                            ),
+                      color: surface,
                       borderRadius: BorderRadius.circular(8),
                       boxShadow: const [
                         BoxShadow(
@@ -293,6 +288,16 @@ class SlidingSegments<T> extends StatelessWidget {
                     selected: value == selected,
                     child: InkWell(
                       onTap: onChanged == null ? null : () => onChanged!(value),
+                      splashFactory: isEntrySwitch
+                          ? NoSplash.splashFactory
+                          : null,
+                      overlayColor: isEntrySwitch
+                          ? WidgetStateProperty.resolveWith(
+                              (states) => states.contains(WidgetState.pressed)
+                                  ? Colors.transparent
+                                  : null,
+                            )
+                          : null,
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(minHeight: 48),
                         child: Padding(
@@ -312,7 +317,9 @@ class SlidingSegments<T> extends StatelessWidget {
                                     : value == selected
                                     ? accent
                                     : mutedInk,
-                                fontWeight: value == selected
+                                fontWeight: isEntrySwitch
+                                    ? FontWeight.w500
+                                    : value == selected
                                     ? FontWeight.w600
                                     : FontWeight.w400,
                               ),
@@ -331,6 +338,9 @@ class SlidingSegments<T> extends StatelessWidget {
   }
 }
 
+const _entrySlideMs = 240;
+const _entrySlideCurve = Curves.easeInOutCubic;
+
 class SlidingEntryContent extends StatelessWidget {
   const SlidingEntryContent({
     super.key,
@@ -342,18 +352,18 @@ class SlidingEntryContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final duration = motion(context, 240);
+    final duration = motion(context, _entrySlideMs);
     if (duration == Duration.zero) return builder(kind);
     final panels = {for (final side in EntryKind.values) side: builder(side)};
     return ClipRect(
       child: AnimatedSize(
         duration: duration,
-        curve: Curves.easeInOutCubic,
+        curve: _entrySlideCurve,
         alignment: Alignment.topCenter,
         child: TweenAnimationBuilder<double>(
           tween: Tween(end: kind.index.toDouble()),
           duration: duration,
-          curve: Curves.easeInOutCubic,
+          curve: _entrySlideCurve,
           builder: (context, position, _) => Stack(
             clipBehavior: Clip.none,
             children: [
