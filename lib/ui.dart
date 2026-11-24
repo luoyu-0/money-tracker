@@ -201,9 +201,9 @@ class PaperPanel extends StatelessWidget {
         boxShadow: raised
             ? const [
                 BoxShadow(
-                  color: Color(0x14264D77),
-                  offset: Offset(0, 4),
-                  blurRadius: 12,
+                  color: Color(0x28274666),
+                  offset: Offset(0, 8),
+                  blurRadius: 20,
                 ),
               ]
             : null,
@@ -211,15 +211,22 @@ class PaperPanel extends StatelessWidget {
       child: Material(
         color: color,
         shape: RoundedRectangleBorder(borderRadius: radius),
-        child: Ink(
-          decoration: raised
-              ? BoxDecoration(
+        child: raised
+            ? Ink(
+                decoration: BoxDecoration(
                   borderRadius: radius,
-                  border: Border.all(color: const Color(0xD9FFFFFF)),
-                )
-              : null,
-          child: Padding(padding: const EdgeInsets.all(16), child: child),
-        ),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color.lerp(color, surface, .52)!,
+                      Color.lerp(color, blueTint, .18)!,
+                    ],
+                  ),
+                ),
+                child: Padding(padding: const EdgeInsets.all(16), child: child),
+              )
+            : Padding(padding: const EdgeInsets.all(16), child: child),
       ),
     );
   }
