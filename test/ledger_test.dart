@@ -5,6 +5,14 @@ import 'package:money_tracker/ai/qwen.dart';
 import 'package:money_tracker/ai/provider.dart';
 
 void main() {
+  test('结余环比以有符号的差额和上月绝对值计算', () {
+    expect(balanceChangePercent(150, 100), 50);
+    expect(balanceChangePercent(-50, -100), 50);
+    expect(balanceChangePercent(-150, -100), -50);
+    expect(balanceChangePercent(100, 100), 0);
+    expect(balanceChangePercent(100, 0), isNull);
+    expect(balanceChangePercent(100, null), isNull);
+  });
   final entry = Entry(
     id: newId(),
     kind: EntryKind.expense,

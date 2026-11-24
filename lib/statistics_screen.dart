@@ -75,19 +75,13 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
       children: [
-        Wrap(
-          spacing: 8,
-          runSpacing: 2,
-          children: [
-            for (final value in PeriodKind.values)
-              ChoiceChip(
-                label: Text(value.label),
-                selected: kind == value,
-                onSelected: (_) => select(value),
-              ),
-          ],
+        SlidingSegments<PeriodKind>(
+          values: PeriodKind.values,
+          label: (value) => value.label,
+          selected: kind,
+          onChanged: select,
         ),
-        const SizedBox(height: 7),
+        const SizedBox(height: 8),
         FutureBuilder<(Period, Period, List<Entry>, List<Entry>)>(
           future: query,
           builder: (context, snapshot) {
@@ -124,7 +118,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   height: 2,
                   child: loading ? const LinearProgressIndicator() : null,
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 SummaryPanel(total),
                 const SectionTitle('收支趋势'),
                 if (entries.isEmpty)
@@ -133,6 +127,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   PaperPanel(
                     child: _Trend(
                       entries: entries,
+                      totals: total,
                       period: current,
                       duration: duration,
                     ),
@@ -140,21 +135,24 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 const SectionTitle('分类构成'),
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: SegmentedButton<EntryKind>(
-                    segments: [
-                      for (final value in EntryKind.values)
-                        ButtonSegment(value: value, label: Text(value.label)),
-                    ],
-                    selected: {breakdown},
-                    onSelectionChanged: (value) =>
-                        setState(() => breakdown = value.first),
+                  child: SizedBox(
+                    width: 176,
+                    child: SlidingSegments<EntryKind>(
+                      values: EntryKind.values,
+                      label: (value) => value.label,
+                      selected: breakdown,
+                      onChanged: (value) => setState(() => breakdown = value),
+                    ),
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 PaperPanel(
-                  child: categories.isEmpty
-                      ? Text('这一时段还没有${breakdown.label}。')
-                      : _Breakdown(values: categories, duration: duration),
+                  child: SlidingEntryContent(
+                    kind: breakdown,
+                    child: categories.isEmpty
+                        ? Text('这一时段还没有${breakdown.label}')
+                        : _Breakdown(values: categories, duration: duration),
+                  ),
                 ),
                 const SectionTitle('时段对比'),
                 Align(
@@ -200,7 +198,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                           [total.expense, past.expense],
                         ],
                         labels: const ['收入', '支出'],
-                        colors: const [green, Color(0xFF777D62)],
+                        colors: const [accent, Color(0xFFA5BED8)],
                         duration: duration,
                       ),
                       Text('收入  ${yuan(total.income)} / ${yuan(past.income)}'),
@@ -247,50 +245,151 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
 }
 
 class SummaryPanel extends StatelessWidget {
-  const SummaryPanel(this.totals, {super.key, this.label = '结余'});
+  const SummaryPanel(
+    this.totals, {
+    super.key,
+    this.label = '结余',
+    this.priorNet,
+    this.showMonthlyChange = false,
+  });
   final Totals totals;
   final String label;
+  final int? priorNet;
+  final bool showMonthlyChange;
 
   @override
-  Widget build(BuildContext context) => PaperPanel(
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(color: mutedInk)),
-        const SizedBox(height: 3),
-        MoneyText(totals.net, large: true),
-        const SizedBox(height: 12),
-        const Divider(height: 1),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 24,
-          runSpacing: 10,
-          children: [
-            for (final (kind, value) in [
-              (EntryKind.income, totals.income),
-              (EntryKind.expense, totals.expense),
-            ])
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(kind.label),
-                  MoneyText(value, kind: kind),
-                ],
+  Widget build(BuildContext context) => Material(
+    color: blueTint,
+    borderRadius: BorderRadius.circular(16),
+    child: Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(color: mutedInk)),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Expanded(
+                child: MoneyText(
+                  totals.net,
+                  large: true,
+                  alignment: TextAlign.start,
+                ),
               ),
+              if (showMonthlyChange) ...[
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _MonthlyChange(
+                    current: totals.net,
+                    previous: priorNet,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final (kind, value) in [
+                (EntryKind.income, totals.income),
+                (EntryKind.expense, totals.expense),
+              ])
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: kind == EntryKind.income
+                        ? CrossAxisAlignment.start
+                        : CrossAxisAlignment.end,
+                    children: [
+                      Text(kind.label),
+                      MoneyText(
+                        value,
+                        kind: kind,
+                        alignment: kind == EntryKind.income
+                            ? TextAlign.start
+                            : TextAlign.end,
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+class _MonthlyChange extends StatelessWidget {
+  const _MonthlyChange({required this.current, required this.previous});
+  final int current;
+  final int? previous;
+
+  @override
+  Widget build(BuildContext context) {
+    final change = balanceChangePercent(current, previous);
+    final color = change == null || change == 0
+        ? mutedInk
+        : change > 0
+        ? incomeColor
+        : expenseColor;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Text(
+          '较上月',
+          style: Theme.of(context).textTheme.bodySmall
+              ?.copyWith(color: mutedInk),
+        ),
+        Wrap(
+          alignment: WrapAlignment.end,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 4,
+          children: [
+            if (change != null)
+              Icon(
+                change > 0
+                    ? Icons.arrow_upward
+                    : change < 0
+                    ? Icons.arrow_downward
+                    : Icons.remove,
+                size: 16,
+                color: color,
+              ),
+            Text(
+              change == null ? '—' : '${change.abs().toStringAsFixed(1)}%',
+              semanticsLabel: change == null
+                  ? '上月无可用的结余基数'
+                  : '${change > 0
+                        ? '增长'
+                        : change < 0
+                        ? '下降'
+                        : '持平'} ${change.abs().toStringAsFixed(1)}%',
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w600,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
           ],
         ),
       ],
-    ),
-  );
+    );
+  }
 }
 
 class _Trend extends StatelessWidget {
   const _Trend({
     required this.entries,
+    required this.totals,
     required this.period,
     required this.duration,
   });
   final List<Entry> entries;
+  final Totals totals;
   final Period period;
   final Duration duration;
 
@@ -305,37 +404,107 @@ class _Trend extends StatelessWidget {
       final offset = Period(period.start, entry.date).length - 1;
       amounts[entry.kind.index][offset ~/ bucketSize] += entry.cents;
     }
+    final peak = amounts.expand((values) => values).reduce(math.max) / 100;
+    final step = _axisStep(peak);
+    final yMax = peak > 0 ? (peak / step).ceil() * step : step;
+    final last = bucketCount - 1;
+    final tickIndexes = {0, (last / 3).round(), (last * 2 / 3).round(), last};
+    final labelStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
+      color: mutedInk,
+      fontFeatures: const [FontFeature.tabularFigures()],
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('收入  ·  支出', style: TextStyle(color: mutedInk)),
-        const SizedBox(height: 10),
+        Align(
+          alignment: Alignment.centerRight,
+          child: Wrap(
+            spacing: 16,
+            runSpacing: 4,
+            children: [
+              for (final kind in EntryKind.values)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(width: 14, height: 3, color: trendColor(kind)),
+                    const SizedBox(width: 4),
+                    Text(kind.label, style: labelStyle),
+                  ],
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
         Semantics(
           label: '收入和支出趋势图。点击图中数据点查看金额。',
           child: SizedBox(
-            height: 160,
+            height: 184,
             child: LineChart(
               LineChartData(
                 minY: 0,
                 minX: 0,
                 maxX: math.max(1, bucketCount - 1).toDouble(),
-                maxY: math
-                    .max(
-                      1,
-                      amounts.expand((value) => value).reduce(math.max) / 100,
-                    )
-                    .toDouble(),
-                titlesData: const FlTitlesData(show: false),
-                borderData: FlBorderData(show: false),
+                maxY: yMax,
+                gridData: const FlGridData(show: false),
+                titlesData: FlTitlesData(
+                  topTitles: const AxisTitles(),
+                  rightTitles: const AxisTitles(),
+                  leftTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 52,
+                      interval: step,
+                      getTitlesWidget: (value, meta) => SideTitleWidget(
+                        meta: meta,
+                        space: 4,
+                        child: Text(_axisAmount(value), style: labelStyle),
+                      ),
+                    ),
+                  ),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      reservedSize: 28,
+                      interval: 1,
+                      getTitlesWidget: (value, meta) {
+                        final index = value.round();
+                        if (!tickIndexes.contains(index))
+                          return const SizedBox.shrink();
+                        final date = dayKey(
+                          day(period.start, index * bucketSize),
+                        ).substring(5);
+                        return SideTitleWidget(
+                          meta: meta,
+                          space: 6,
+                          fitInside: SideTitleFitInsideData.fromTitleMeta(
+                            meta,
+                            distanceFromEdge: 0,
+                          ),
+                          child: Text(date, style: labelStyle),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                borderData: FlBorderData(
+                  border: const Border(
+                    left: BorderSide(color: rule),
+                    bottom: BorderSide(color: rule),
+                  ),
+                ),
                 lineBarsData: [
                   for (final kind in EntryKind.values)
                     LineChartBarData(
-                      color: kind == EntryKind.income
-                          ? incomeColor
-                          : expenseColor,
+                      color: trendColor(kind),
                       barWidth: 2.5,
-                      dashArray: kind == EntryKind.expense ? [6, 3] : null,
-                      dotData: FlDotData(show: bucketCount < 9),
+                      dotData: FlDotData(
+                        getDotPainter: (_, _, _, _) => FlDotCirclePainter(
+                          radius: 2.5,
+                          color: surface,
+                          strokeWidth: 1.5,
+                          strokeColor: trendColor(kind),
+                        ),
+                      ),
                       spots: [
                         for (var idx = 0; idx < bucketCount; idx++)
                           FlSpot(
@@ -366,24 +535,44 @@ class _Trend extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        Text(
-          '${dayKey(period.start)} 至 ${dayKey(period.end)}${bucketSize > 1 ? '，每 $bucketSize 天汇总' : ''}',
-        ),
-        Text(
-          '收入 ${yuan(Totals(entries).income)}，支出 ${yuan(Totals(entries).expense)}',
-        ),
+        if (bucketSize > 1) Text('每 $bucketSize 天汇总', style: labelStyle),
+        Text('收入 ${yuan(totals.income)}，支出 ${yuan(totals.expense)}'),
       ],
     );
   }
 }
 
+Color trendColor(EntryKind kind) =>
+    kind == EntryKind.income ? accent : expenseColor;
+
+double _axisStep(double maximum) {
+  if (maximum <= 0) return 1;
+  final rough = maximum / 4;
+  final scale = math.pow(10, (math.log(rough) / math.ln10).floor()).toDouble();
+  final normalized = rough / scale;
+  for (final factor in [1, 2, 2.5, 5, 10]) {
+    if (normalized <= factor) return math.max(0.01, scale * factor);
+  }
+  return math.max(0.01, scale * 10);
+}
+
+String _axisAmount(double value) {
+  if (value >= 100000000) return '${(value / 100000000).toStringAsFixed(1)}亿';
+  if (value >= 10000) return '${(value / 10000).toStringAsFixed(1)}万';
+  return '¥${value.toStringAsFixed(value == value.truncate()
+      ? 0
+      : (value * 10).round() / 10 == value
+      ? 1
+      : 2)}';
+}
+
 const chartColors = [
-  Color(0xFF30664D),
-  Color(0xFF9E4432),
-  Color(0xFF756338),
-  Color(0xFF42667C),
-  Color(0xFF7C5578),
-  Color(0xFF526259),
+  Color(0xFF3274C9),
+  Color(0xFF71A4E8),
+  Color(0xFF9E7544),
+  Color(0xFF438277),
+  Color(0xFF79668D),
+  Color(0xFF7288A7),
 ];
 
 class _Breakdown extends StatelessWidget {
@@ -405,21 +594,27 @@ class _Breakdown extends StatelessWidget {
               sorted.skip(5).fold<int>(0, (sum, value) => sum + value.value),
             ),
           ];
+    const holeRadius = 42.0;
+    const ringWidth = 26.0;
+    final smallest = chart.map((category) => category.value).reduce(math.min);
+    final shortestArc =
+        smallest / total * 2 * math.pi * (holeRadius + ringWidth / 2);
     return Column(
       children: [
         ExcludeSemantics(
           child: SizedBox(
-            height: 145,
+            height: 160,
             child: PieChart(
               PieChartData(
-                centerSpaceRadius: 42,
-                sectionsSpace: 3,
+                centerSpaceRadius: holeRadius,
+                sectionsSpace: math.min(3.0, shortestArc * 0.35),
                 sections: [
                   for (var index = 0; index < chart.length; index++)
                     PieChartSectionData(
                       color: chartColors[index],
                       value: chart[index].value.toDouble(),
-                      radius: 20,
+                      radius: ringWidth,
+                      cornerRadius: 5,
                       showTitle: false,
                     ),
                 ],
@@ -431,7 +626,7 @@ class _Breakdown extends StatelessWidget {
         ),
         for (var index = 0; index < sorted.length; index++)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 5),
+            padding: const EdgeInsets.symmetric(vertical: 4),
             child: Row(
               children: [
                 DecoratedBox(
@@ -441,12 +636,25 @@ class _Breakdown extends StatelessWidget {
                   ),
                   child: const SizedBox(width: 8, height: 8),
                 ),
-                const SizedBox(width: 10),
-                Expanded(child: Text(sorted[index].key)),
-                Flexible(
+                const SizedBox(width: 8),
+                Expanded(flex: 4, child: Text(sorted[index].key)),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 3,
+                  child: MoneyText(
+                    sorted[index].value,
+                    alignment: TextAlign.start,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  flex: 2,
                   child: Text(
-                    '${yuan(sorted[index].value)}  ·  ${(100 * sorted[index].value / total).toStringAsFixed(1)}%',
-                    textAlign: TextAlign.end,
+                    '${(100 * sorted[index].value / total).toStringAsFixed(1)}%',
+                    style: const TextStyle(
+                      color: mutedInk,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
                   ),
                 ),
               ],
@@ -477,6 +685,7 @@ class _Bars extends StatelessWidget {
       height: 126,
       child: BarChart(
         BarChartData(
+          gridData: const FlGridData(show: false),
           maxY:
               math
                   .max(1, groups.expand((item) => item).reduce(math.max) / 100)

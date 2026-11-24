@@ -155,14 +155,9 @@ class _EntryEditorState extends State<_EntryEditor> {
     canPop: !busy,
     child: SafeArea(
       top: false,
-      child: AnimatedPadding(
-        duration: motion(context, 150),
-        curve: Curves.easeOut,
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.viewInsetsOf(context).bottom,
-        ),
+      child: _KeyboardInset(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(22, 20, 22, 16),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
           child: Form(
             key: form,
             child: Column(
@@ -183,18 +178,16 @@ class _EntryEditorState extends State<_EntryEditor> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                SegmentedButton<EntryKind>(
-                  segments: [
-                    for (final item in EntryKind.values)
-                      ButtonSegment(value: item, label: Text(item.label)),
-                  ],
-                  selected: {kind},
-                  onSelectionChanged: busy
+                const SizedBox(height: 12),
+                SlidingSegments<EntryKind>(
+                  values: EntryKind.values,
+                  label: (kind) => kind.label,
+                  selected: kind,
+                  onChanged: busy
                       ? null
                       : (selection) => setState(() {
-                          if (kind != selection.first) {
-                            kind = selection.first;
+                          if (kind != selection) {
+                            kind = selection;
                             category = null;
                             showCategoryError = false;
                           }
@@ -232,32 +225,35 @@ class _EntryEditorState extends State<_EntryEditor> {
                         if (option.kind == kind) option.label,
                       ?category,
                     }.toList();
-                    return Wrap(
-                      spacing: 8,
-                      runSpacing: 2,
-                      children: [
-                        for (final value in values)
-                          ChoiceChip(
-                            label: Text(value),
-                            selected: category == value,
-                            onSelected: busy
-                                ? null
-                                : (_) => setState(() {
-                                    category = value;
-                                    showCategoryError = false;
-                                  }),
-                            chipAnimationStyle: ChipAnimationStyle(
-                              selectAnimation: AnimationStyle(
-                                duration: motion(context, 140),
+                    return SlidingEntryContent(
+                      kind: kind,
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 2,
+                        children: [
+                          for (final value in values)
+                            ChoiceChip(
+                              label: Text(value),
+                              selected: category == value,
+                              onSelected: busy
+                                  ? null
+                                  : (_) => setState(() {
+                                      category = value;
+                                      showCategoryError = false;
+                                    }),
+                              chipAnimationStyle: ChipAnimationStyle(
+                                selectAnimation: AnimationStyle(
+                                  duration: motion(context, 140),
+                                ),
                               ),
                             ),
+                          ActionChip(
+                            avatar: const Icon(Icons.add, size: 18),
+                            label: const Text('添加'),
+                            onPressed: busy ? null : () => addOption(values),
                           ),
-                        ActionChip(
-                          avatar: const Icon(Icons.add, size: 18),
-                          label: const Text('添加'),
-                          onPressed: busy ? null : () => addOption(values),
-                        ),
-                      ],
+                        ],
+                      ),
                     );
                   },
                 ),
@@ -266,7 +262,7 @@ class _EntryEditorState extends State<_EntryEditor> {
                     '请选择${kind.categoryLabel}',
                     style: const TextStyle(color: expenseColor),
                   ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: counterparty,
                   enabled: !busy,
@@ -295,7 +291,7 @@ class _EntryEditorState extends State<_EntryEditor> {
                   icon: const Icon(Icons.calendar_today_outlined),
                   label: Text('发生日期  ${dayKey(date)}'),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
                 FilledButton(
                   onPressed: busy ? null : save,
                   child: Text(busy ? '正在保存…' : '保存账目'),
@@ -312,5 +308,17 @@ class _EntryEditorState extends State<_EntryEditor> {
         ),
       ),
     ),
+  );
+}
+
+class _KeyboardInset extends StatelessWidget {
+  const _KeyboardInset({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    key: const ValueKey('editor-keyboard-inset'),
+    padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+    child: child,
   );
 }

@@ -38,6 +38,11 @@ String amountText(int cents) {
 
 String yuan(int cents) => '¥${amountText(cents)}';
 
+double? balanceChangePercent(int current, int? previous) =>
+    previous == null || previous == 0
+    ? null
+    : (current - previous) / previous.abs() * 100;
+
 class Entry {
   const Entry({
     required this.id,

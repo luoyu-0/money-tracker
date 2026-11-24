@@ -75,12 +75,29 @@ class _Home extends StatefulWidget {
 
 class _HomeState extends State<_Home> {
   final aiSettings = const AiSettings();
+  final pages = PageController();
   int selected = 0;
   int revision = 0;
   bool settingsBusy = false;
   String? highlighted;
 
   void changed() => setState(() => revision++);
+
+  @override
+  void dispose() {
+    pages.dispose();
+    super.dispose();
+  }
+
+  void selectPage(int page) {
+    if (settingsBusy || !pages.hasClients) return;
+    final duration = motion(context, 300);
+    if (duration == Duration.zero) {
+      pages.jumpToPage(page);
+      return;
+    }
+    pages.animateToPage(page, duration: duration, curve: Curves.easeInCubic);
+  }
 
   Future<void> record([Entry? entry]) async {
     final result = await editEntry(context, widget.store, entry);
@@ -101,7 +118,7 @@ class _HomeState extends State<_Home> {
           initialMonth: month,
           openSettings: () {
             Navigator.pop(routeContext);
-            setState(() => selected = 2);
+            selectPage(2);
           },
         ),
       ),
@@ -113,31 +130,39 @@ class _HomeState extends State<_Home> {
     appBar: AppBar(
       title: Text(
         const ['账本', '统计', '设置'][selected],
-        style: const TextStyle(fontWeight: FontWeight.w700),
+        style: const TextStyle(fontWeight: FontWeight.w600),
       ),
     ),
     body: SafeArea(
       top: false,
       bottom: false,
-      child: IndexedStack(
-        index: selected,
+      child: PageView(
+        controller: pages,
+        physics: settingsBusy ? const NeverScrollableScrollPhysics() : null,
+        onPageChanged: (value) => setState(() => selected = value),
         children: [
-          _LedgerScreen(
-            store: widget.store,
-            revision: revision,
-            highlighted: highlighted,
-            edit: record,
+          _PreservedPage(
+            child: _LedgerScreen(
+              store: widget.store,
+              revision: revision,
+              highlighted: highlighted,
+              edit: record,
+            ),
           ),
-          StatisticsScreen(
-            store: widget.store,
-            revision: revision,
-            openAnalysis: openAnalysis,
+          _PreservedPage(
+            child: StatisticsScreen(
+              store: widget.store,
+              revision: revision,
+              openAnalysis: openAnalysis,
+            ),
           ),
-          SettingsScreen(
-            store: widget.store,
-            aiSettings: aiSettings,
-            onChanged: changed,
-            onBusyChanged: (value) => setState(() => settingsBusy = value),
+          _PreservedPage(
+            child: SettingsScreen(
+              store: widget.store,
+              aiSettings: aiSettings,
+              onChanged: changed,
+              onBusyChanged: (value) => setState(() => settingsBusy = value),
+            ),
           ),
         ],
       ),
@@ -145,7 +170,7 @@ class _HomeState extends State<_Home> {
     floatingActionButton: selected != 0
         ? null
         : FloatingActionButton.extended(
-            backgroundColor: green,
+            backgroundColor: accent,
             foregroundColor: Colors.white,
             onPressed: record,
             icon: const Icon(Icons.add),
@@ -154,9 +179,7 @@ class _HomeState extends State<_Home> {
     bottomNavigationBar: NavigationBar(
       selectedIndex: selected,
       animationDuration: motion(context, 180),
-      onDestinationSelected: settingsBusy
-          ? null
-          : (value) => setState(() => selected = value),
+      onDestinationSelected: settingsBusy ? null : selectPage,
       destinations: const [
         NavigationDestination(
           icon: Icon(Icons.receipt_long_outlined),
@@ -178,6 +201,26 @@ class _HomeState extends State<_Home> {
   );
 }
 
+class _PreservedPage extends StatefulWidget {
+  const _PreservedPage({required this.child});
+  final Widget child;
+
+  @override
+  State<_PreservedPage> createState() => _PreservedPageState();
+}
+
+class _PreservedPageState extends State<_PreservedPage>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
+  }
+}
+
 class _LedgerScreen extends StatefulWidget {
   const _LedgerScreen({
     required this.store,
@@ -196,14 +239,26 @@ class _LedgerScreen extends StatefulWidget {
 
 class _LedgerScreenState extends State<_LedgerScreen> {
   int limit = 60;
-  late Future<(Totals, List<Entry>)> query = load();
+  late Future<(Totals, int?, List<Entry>)> query = load();
 
-  Future<(Totals, List<Entry>)> load() async {
+  Future<(Totals, int?, List<Entry>)> load() async {
+    final now = DateTime.now();
     final results = await Future.wait([
-      widget.store.entries(PeriodKind.month.ranges(DateTime.now()).$1),
+      widget.store.entries(PeriodKind.month.ranges(now).$1),
+      widget.store.entries(
+        Period(
+          DateTime(now.year, now.month - 1),
+          DateTime(now.year, now.month, 0),
+        ),
+      ),
       widget.store.entries(null, limit + 1),
     ]);
-    return (Totals(results[0]), results[1]);
+    final priorEntries = results[1];
+    return (
+      Totals(results[0]),
+      priorEntries.isEmpty ? null : Totals(priorEntries).net,
+      results[2],
+    );
   }
 
   @override
@@ -213,7 +268,9 @@ class _LedgerScreenState extends State<_LedgerScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => FutureBuilder<(Totals, List<Entry>)>(
+  Widget build(
+    BuildContext context,
+  ) => FutureBuilder<(Totals, int?, List<Entry>)>(
     future: query,
     builder: (context, snapshot) {
       if (!snapshot.hasData)
@@ -225,18 +282,23 @@ class _LedgerScreenState extends State<_LedgerScreen> {
                 )
               : const CircularProgressIndicator(semanticsLabel: '正在读取账本'),
         );
-      final (totals, records) = snapshot.data!;
+      final (totals, priorNet, records) = snapshot.data!;
       final count = records.length > limit ? limit : records.length;
       final now = DateTime.now();
       return ListView.builder(
-        padding: const EdgeInsets.fromLTRB(20, 7, 20, 92),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 92),
         itemCount: count + 2,
         itemBuilder: (context, index) {
           if (index == 0)
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                SummaryPanel(totals, label: '${now.month} 月结余'),
+                SummaryPanel(
+                  totals,
+                  label: '${now.month} 月结余',
+                  priorNet: priorNet,
+                  showMonthlyChange: true,
+                ),
                 const SectionTitle('最近账目'),
               ],
             );
@@ -279,7 +341,7 @@ class _LedgerScreenState extends State<_LedgerScreen> {
             children: [
               if (startsDate)
                 Padding(
-                  padding: const EdgeInsets.only(top: 12, bottom: 6),
+                  padding: const EdgeInsets.only(top: 12, bottom: 8),
                   child: Semantics(
                     header: true,
                     child: Text(
@@ -294,17 +356,15 @@ class _LedgerScreenState extends State<_LedgerScreen> {
               TweenAnimationBuilder<Color?>(
                 key: ValueKey('${entry.id}:${widget.highlighted == entry.id}'),
                 tween: ColorTween(
-                  begin: widget.highlighted == entry.id
-                      ? const Color(0xFFDDEBDD)
-                      : surface,
-                  end: surface,
+                  begin: widget.highlighted == entry.id ? blueTint : paper,
+                  end: paper,
                 ),
                 duration: motion(context, 240),
                 builder: (context, color, child) =>
                     Material(color: color, child: child),
                 child: ListTile(
                   onTap: () => widget.edit(entry),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                  contentPadding: EdgeInsets.zero,
                   title: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -315,7 +375,7 @@ class _LedgerScreenState extends State<_LedgerScreen> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Flexible(
+                      Expanded(
                         child: MoneyText(
                           entry.cents,
                           kind: entry.kind,
@@ -324,11 +384,12 @@ class _LedgerScreenState extends State<_LedgerScreen> {
                       ),
                     ],
                   ),
-                  subtitle: Text(
-                    entry.counterparty == null
-                        ? entry.kind.label
-                        : '${entry.kind.label} · ${entry.counterparty}',
-                  ),
+                  subtitle: entry.counterparty == null
+                      ? null
+                      : Text(
+                          entry.counterparty!,
+                          style: const TextStyle(color: mutedInk),
+                        ),
                 ),
               ),
               const Divider(height: 1),
