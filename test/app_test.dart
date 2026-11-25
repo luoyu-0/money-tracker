@@ -337,12 +337,76 @@ void main() {
     await tester.tap(find.widgetWithText(NavigationDestination, '统计'));
     await tester.pumpAndSettle();
     expect(find.text('收支趋势'), findsOneWidget);
-    expect(find.text('本月'), findsOneWidget);
+    expect(
+      find.widgetWithText(SlidingSegments<PeriodKind>, '本月'),
+      findsOneWidget,
+    );
     expect(find.text('自定义'), findsNothing);
     await tester.tap(find.widgetWithText(NavigationDestination, '设置'));
     await tester.pumpAndSettle();
     expect(find.text('创建整本备份'), findsOneWidget);
     expect(find.text('清除缓存'), findsOneWidget);
+  });
+
+  testWidgets('统计用结余摘要和表格自动对比上一周期同期', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(360, 900));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final store = _TestStore();
+    final now = DateTime.now();
+    final (current, prior) = PeriodKind.month.ranges(now);
+    for (final (date, kind, cents, category) in [
+      (current.start, EntryKind.income, 11025, '工资'),
+      (current.start, EntryKind.expense, 2400, '餐饮'),
+      (prior.start, EntryKind.expense, 15600, '餐饮'),
+      (DateTime(now.year - 1), EntryKind.income, 50000, '工资'),
+    ]) {
+      await store.saveEntry(
+        Entry(
+          id: newId(),
+          kind: kind,
+          date: date,
+          cents: cents,
+          category: category,
+        ),
+      );
+    }
+    await tester.pumpWidget(MoneyTrackerApp(openStore: () async => store));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(NavigationDestination, '统计'));
+    await tester.pumpAndSettle();
+
+    final table = find.byType(Table);
+    Finder tableText(String value) =>
+        find.descendant(of: table, matching: find.text(value));
+    expect(find.text('结余变化（上月同期 → 本月）'), findsOneWidget);
+    expect(find.text('结余改善 242.25 元'), findsOneWidget);
+    for (final value in [
+      '¥110.25',
+      '¥24',
+      '−¥156',
+      '+110.25',
+      '−132',
+      '+242.25',
+    ]) {
+      expect(tableText(value), findsOneWidget);
+    }
+    expect(tester.widget<Text>(tableText('−132')).style?.color, incomeColor);
+    expect(find.text('选择对比时段'), findsNothing);
+    expect(find.text('本时段收支'), findsNothing);
+    expect(find.text('本月明细'), findsNothing);
+
+    tester.platformDispatcher.textScaleFactorTestValue = 1.7;
+    await tester.tap(
+      find.descendant(
+        of: find.byType(SlidingSegments<PeriodKind>),
+        matching: find.text('本年'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('结余变化（去年同期 → 本年）'), findsOneWidget);
+    expect(find.textContaining('结余减少'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('主页面跟随横向手势，切换后保留统计筛选', (tester) async {

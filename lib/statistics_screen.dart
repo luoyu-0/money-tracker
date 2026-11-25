@@ -24,27 +24,20 @@ class StatisticsScreen extends StatefulWidget {
 
 class _StatisticsScreenState extends State<StatisticsScreen> {
   PeriodKind kind = PeriodKind.month;
-  Period? comparison;
   EntryKind breakdown = EntryKind.expense;
-  late (Period, Period) ranges = computeRanges();
-  late Future<(Period, Period, List<Entry>, List<Entry>)> query = load();
+  late Future<(PeriodKind, Period, List<Entry>, List<Entry>)> query = load();
 
-  (Period, Period) computeRanges() {
-    final (current, prior) = kind.ranges(DateTime.now());
-    return (current, comparison ?? prior);
-  }
-
-  Future<(Period, Period, List<Entry>, List<Entry>)> load() async {
-    final (current, prior) = ranges;
+  Future<(PeriodKind, Period, List<Entry>, List<Entry>)> load() async {
+    final selected = kind;
+    final (current, prior) = selected.ranges(DateTime.now());
     final results = await Future.wait([
       widget.store.entries(current),
       widget.store.entries(prior),
     ]);
-    return (current, prior, results[0], results[1]);
+    return (selected, current, results[0], results[1]);
   }
 
   void refresh() {
-    ranges = computeRanges();
     query = load();
   }
 
@@ -58,7 +51,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
     if (next == kind) return;
     setState(() {
       kind = next;
-      comparison = null;
       refresh();
     });
   }
@@ -75,7 +67,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
           onChanged: select,
         ),
         const SizedBox(height: 8),
-        FutureBuilder<(Period, Period, List<Entry>, List<Entry>)>(
+        FutureBuilder<(PeriodKind, Period, List<Entry>, List<Entry>)>(
           future: query,
           builder: (context, snapshot) {
             final loading = snapshot.connectionState != ConnectionState.done;
@@ -96,7 +88,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                 ],
               );
             }
-            final (current, prior, entries, priorEntries) = snapshot.data!;
+            final (selected, current, entries, priorEntries) = snapshot.data!;
             final total = Totals(entries);
             final past = Totals(priorEntries);
             final duration = motion(context, 210);
@@ -109,7 +101,7 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                   child: loading ? const LinearProgressIndicator() : null,
                 ),
                 const SizedBox(height: 12),
-                SummaryPanel(income: total.income, expense: total.expense),
+                _PeriodComparison(kind: selected, total: total, past: past),
                 const SectionTitle('收支趋势'),
                 if (entries.isEmpty)
                   const PaperPanel(child: Text('这一时段还没有账目。'))
@@ -153,45 +145,6 @@ class _StatisticsScreenState extends State<StatisticsScreen> {
                     },
                   ),
                 ),
-                const SectionTitle('时段对比'),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: FilledButton.tonalIcon(
-                    onPressed: () async {
-                      final picked = await choosePeriod(
-                        context,
-                        prior.start.year >= 1900 ? prior : null,
-                      );
-                      if (mounted && picked != null)
-                        setState(() {
-                          comparison = picked;
-                          refresh();
-                        });
-                    },
-                    icon: const Icon(Icons.calendar_today_outlined),
-                    label: const Text('选择对比时段'),
-                  ),
-                ),
-                if (comparison != null)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton(
-                      onPressed: () => setState(() {
-                        comparison = null;
-                        refresh();
-                      }),
-                      child: const Text('恢复默认对比'),
-                    ),
-                  ),
-                const SizedBox(height: 8),
-                _PeriodComparison(
-                  current: current,
-                  prior: prior,
-                  total: total,
-                  past: past,
-                ),
-                const SectionTitle('本时段收支'),
-                _CurrentComparison(period: current, totals: total),
                 const SizedBox(height: 24),
                 FilledButton.tonalIcon(
                   onPressed: () => widget.openAnalysis(current.end),
@@ -627,193 +580,212 @@ class _Breakdown extends StatelessWidget {
 
 class _PeriodComparison extends StatelessWidget {
   const _PeriodComparison({
-    required this.current,
-    required this.prior,
+    required this.kind,
     required this.total,
     required this.past,
   });
 
-  final Period current;
-  final Period prior;
+  final PeriodKind kind;
   final Totals total;
   final Totals past;
 
   @override
   Widget build(BuildContext context) {
-    final maximum = [
-      total.income,
-      total.expense,
-      past.income,
-      past.expense,
-    ].reduce(math.max);
-    return PaperPanel(
-      raised: true,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _PeriodLabel('当前时段', current),
-          const SizedBox(height: 8),
-          _PeriodLabel('对比时段', prior),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Divider(height: 1),
-          ),
-          for (final (kind, currentValue, priorValue) in [
-            (EntryKind.income, total.income, past.income),
-            (EntryKind.expense, total.expense, past.expense),
-          ]) ...[
-            if (kind == EntryKind.expense)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Divider(height: 1),
-              ),
-            Text(
-              kind.label,
-              style: TextStyle(fontWeight: FontWeight.w600, color: kind.color),
-            ),
-            const SizedBox(height: 4),
-            _AmountBar(
-              label: '当前',
-              kind: kind,
-              value: currentValue,
-              maximum: maximum,
-            ),
-            const SizedBox(height: 8),
-            _AmountBar(
-              label: '对比',
-              kind: kind,
-              value: priorValue,
-              maximum: maximum,
-              comparison: true,
-            ),
-          ],
-        ],
-      ),
+    final previous = switch (kind) {
+      PeriodKind.week => '上周同期',
+      PeriodKind.month => '上月同期',
+      PeriodKind.year => '去年同期',
+    };
+    final change = total.net - past.net;
+    final changeColor = _changeColor(change);
+    final balanceStyle = Theme.of(context).textTheme.headlineMedium?.copyWith(
+      fontWeight: FontWeight.w700,
+      fontFeatures: const [FontFeature.tabularFigures()],
     );
-  }
-}
+    final priorBalance = _comparisonAmount(past.net, signed: true);
+    final balance = _comparisonAmount(total.net, signed: true);
+    final changeAmount = _comparisonAmount(change.abs(), currency: false);
 
-class _CurrentComparison extends StatelessWidget {
-  const _CurrentComparison({required this.period, required this.totals});
-
-  final Period period;
-  final Totals totals;
-
-  @override
-  Widget build(BuildContext context) {
-    final maximum = math.max(totals.income, totals.expense);
-    return PaperPanel(
-      raised: true,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(period.label, style: const TextStyle(color: mutedInk)),
-          const SizedBox(height: 12),
-          _AmountBar(
-            label: '收入',
-            kind: EntryKind.income,
-            value: totals.income,
-            maximum: maximum,
-          ),
-          const SizedBox(height: 12),
-          _AmountBar(
-            label: '支出',
-            kind: EntryKind.expense,
-            value: totals.expense,
-            maximum: maximum,
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Divider(height: 1),
-          ),
-          Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        PaperPanel(
+          raised: true,
+          child: Column(
             children: [
-              const Expanded(child: Text('结余')),
-              Expanded(child: MoneyText(totals.net)),
+              Text(
+                '结余变化（$previous → ${kind.label}）',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: mutedInk),
+              ),
+              const SizedBox(height: 8),
+              Semantics(
+                label: '$previous结余 $priorBalance，${kind.label}结余 $balance',
+                excludeSemantics: true,
+                child: Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 8,
+                  children: [
+                    Text(
+                      priorBalance,
+                      textAlign: TextAlign.center,
+                      style: balanceStyle?.copyWith(
+                        color: _changeColor(past.net),
+                      ),
+                    ),
+                    Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: '→ ',
+                            style: Theme.of(context).textTheme.titleMedium,
+                          ),
+                          TextSpan(text: balance),
+                        ],
+                      ),
+                      textAlign: TextAlign.center,
+                      style: balanceStyle?.copyWith(
+                        color: _changeColor(total.net),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                switch (change) {
+                  > 0 => '结余改善 $changeAmount 元',
+                  < 0 => '结余减少 $changeAmount 元',
+                  _ => '结余持平',
+                },
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: changeColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ],
           ),
-        ],
-      ),
+        ),
+        const SizedBox(height: 12),
+        PaperPanel(
+          raised: true,
+          child: Table(
+            defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+            columnWidths: const {
+              0: FlexColumnWidth(.75),
+              2: FlexColumnWidth(1.15),
+            },
+            border: const TableBorder(
+              horizontalInside: BorderSide(color: rule),
+            ),
+            children: [
+              TableRow(
+                children: [
+                  for (final (index, label) in [
+                    '项目',
+                    kind.label,
+                    previous,
+                    '变动',
+                  ].indexed)
+                    _ComparisonCell(
+                      label,
+                      leading: index == 0,
+                      color: mutedInk,
+                      header: true,
+                    ),
+                ],
+              ),
+              for (final (label, value, prior, color, lowerIsBetter) in [
+                ('收入', total.income, past.income, incomeColor, false),
+                ('支出', total.expense, past.expense, expenseColor, true),
+                (
+                  '结余',
+                  total.net,
+                  past.net,
+                  total.net < 0 ? expenseColor : accent,
+                  false,
+                ),
+              ])
+                TableRow(
+                  children: [
+                    _ComparisonCell(label, leading: true, header: true),
+                    _ComparisonCell(_comparisonAmount(value), color: color),
+                    _ComparisonCell(
+                      _comparisonAmount(prior),
+                      color: prior < 0 ? expenseColor : ink,
+                    ),
+                    _ComparisonCell(
+                      _comparisonAmount(
+                        value - prior,
+                        signed: true,
+                        currency: false,
+                      ),
+                      color: _changeColor(
+                        lowerIsBetter ? prior - value : value - prior,
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
 
-class _PeriodLabel extends StatelessWidget {
-  const _PeriodLabel(this.label, this.period);
+class _ComparisonCell extends StatelessWidget {
+  const _ComparisonCell(
+    this.text, {
+    this.color = ink,
+    this.leading = false,
+    this.header = false,
+  });
 
-  final String label;
-  final Period period;
+  final String text;
+  final Color color;
+  final bool leading;
+  final bool header;
 
   @override
-  Widget build(BuildContext context) => Text.rich(
-    TextSpan(
-      text: '$label  ',
-      style: const TextStyle(fontWeight: FontWeight.w600),
-      children: [
-        TextSpan(
-          text: period.label,
-          style: const TextStyle(color: mutedInk, fontWeight: FontWeight.w400),
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 10),
+    child: Semantics(
+      header: header,
+      child: Text(
+        text,
+        textAlign: leading ? TextAlign.start : TextAlign.end,
+        style: TextStyle(
+          color: color,
+          fontWeight: header ? FontWeight.w600 : FontWeight.normal,
+          fontFeatures: const [FontFeature.tabularFigures()],
         ),
-      ],
+      ),
     ),
   );
 }
 
-class _AmountBar extends StatelessWidget {
-  const _AmountBar({
-    required this.label,
-    required this.kind,
-    required this.value,
-    required this.maximum,
-    this.comparison = false,
-  });
+Color _changeColor(int amount) => switch (amount) {
+  > 0 => incomeColor,
+  < 0 => expenseColor,
+  _ => mutedInk,
+};
 
-  final String label;
-  final EntryKind kind;
-  final int value;
-  final int maximum;
-  final bool comparison;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(color: comparison ? mutedInk : kind.color),
-            ),
-          ),
-          Expanded(child: MoneyText(value, kind: kind)),
-        ],
-      ),
-      const SizedBox(height: 4),
-      ExcludeSemantics(
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(4),
-          child: ColoredBox(
-            color: controlTrack,
-            child: Align(
-              alignment: AlignmentDirectional.centerStart,
-              child: TweenAnimationBuilder<double>(
-                tween: Tween(end: maximum == 0 ? 0 : value / maximum),
-                duration: motion(context, 180),
-                curve: Curves.easeOutCubic,
-                builder: (context, fraction, mark) =>
-                    FractionallySizedBox(widthFactor: fraction, child: mark),
-                child: ColoredBox(
-                  color: comparison
-                      ? kind.color.withValues(alpha: .42)
-                      : kind.color,
-                  child: SizedBox(height: comparison ? 5 : 8),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    ],
-  );
+String _comparisonAmount(
+  int cents, {
+  bool signed = false,
+  bool currency = true,
+}) {
+  final absolute = cents.abs();
+  final amount = absolute % 100 == 0
+      ? '${absolute ~/ 100}'
+      : amountText(absolute);
+  final sign = cents < 0
+      ? '−'
+      : signed && cents > 0
+      ? '+'
+      : '';
+  return '$sign${currency ? '¥' : ''}$amount';
 }
