@@ -377,8 +377,6 @@ void main() {
     await tester.pumpAndSettle();
 
     final table = find.byType(Table);
-    Finder tableText(String value) =>
-        find.descendant(of: table, matching: find.text(value));
     expect(find.text('结余变化（上月同期 → 本月）'), findsOneWidget);
     expect(find.text('结余改善 242.25 元'), findsOneWidget);
     final cells = find.descendant(of: table, matching: find.byType(Text));
@@ -400,7 +398,23 @@ void main() {
       '−¥156',
       '+¥242.25',
     ]);
-    expect(tester.widget<Text>(tableText('−¥132')).style?.color, incomeColor);
+    expect(
+      tester
+          .widgetList<Text>(cells)
+          .where((cell) => cell.data!.contains('¥'))
+          .map((cell) => cell.style?.color),
+      [
+        incomeColor,
+        mutedInk,
+        incomeColor,
+        expenseColor,
+        expenseColor,
+        incomeColor,
+        incomeColor,
+        expenseColor,
+        incomeColor,
+      ],
+    );
     expect(find.text('选择对比时段'), findsNothing);
     expect(find.text('本时段收支'), findsNothing);
     expect(find.text('本月明细'), findsNothing);
@@ -415,6 +429,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('结余变化（去年同期 → 本年）'), findsOneWidget);
     expect(find.textContaining('结余减少'), findsOneWidget);
+    final priorAmounts = find.descendant(
+      of: table,
+      matching: find.text('+¥500'),
+    );
+    expect(
+      tester.widgetList<Text>(priorAmounts).map((cell) => cell.style?.color),
+      [incomeColor, incomeColor],
+    );
     expect(tester.takeException(), isNull);
   });
 

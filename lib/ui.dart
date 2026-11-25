@@ -10,8 +10,8 @@ const accent = Color(0xFF215BA5);
 const blueTint = Color(0xFFE0EEFF);
 const selectedTint = Color(0xFFC3DAF8);
 const controlTrack = Color(0xFFEAF2FC);
-const incomeColor = Color(0xFF216B54);
-const expenseColor = Color(0xFFAA4C41);
+const incomeColor = Color(0xFF167A55);
+const expenseColor = Color(0xFFC92E35);
 const rule = Color(0xFFDCE6F1);
 
 extension EntryKindStyle on EntryKind {

@@ -483,7 +483,7 @@ const chartColors = [
   Color(0xFF3274C9),
   Color(0xFF71A4E8),
   Color(0xFF9E7544),
-  Color(0xFF438277),
+  Color(0xFF358C7B),
   Color(0xFF79668D),
   Color(0xFF7288A7),
 ];
@@ -597,7 +597,7 @@ class _PeriodComparison extends StatelessWidget {
       PeriodKind.year => '去年同期',
     };
     final change = total.net - past.net;
-    final changeColor = _changeColor(change);
+    final changeColor = _signedColor(change);
     final balanceStyle = Theme.of(context).textTheme.headlineMedium?.copyWith(
       fontWeight: FontWeight.w700,
       fontFeatures: const [FontFeature.tabularFigures()],
@@ -631,7 +631,7 @@ class _PeriodComparison extends StatelessWidget {
                       priorBalance,
                       textAlign: TextAlign.center,
                       style: balanceStyle?.copyWith(
-                        color: _changeColor(past.net),
+                        color: _signedColor(past.net),
                       ),
                     ),
                     Text.rich(
@@ -646,7 +646,7 @@ class _PeriodComparison extends StatelessWidget {
                       ),
                       textAlign: TextAlign.center,
                       style: balanceStyle?.copyWith(
-                        color: _changeColor(total.net),
+                        color: _signedColor(total.net),
                       ),
                     ),
                   ],
@@ -697,39 +697,28 @@ class _PeriodComparison extends StatelessWidget {
                     ),
                 ],
               ),
-              for (final (label, value, prior, color, isExpense) in [
-                ('收入', total.income, past.income, incomeColor, false),
-                ('支出', total.expense, past.expense, expenseColor, true),
-                (
-                  '结余',
-                  total.net,
-                  past.net,
-                  total.net < 0 ? expenseColor : accent,
-                  false,
-                ),
+              for (final (label, value, prior, isExpense) in [
+                ('收入', total.income, past.income, false),
+                ('支出', -total.expense, -past.expense, true),
+                ('结余', total.net, past.net, false),
               ])
                 TableRow(
                   children: [
                     _ComparisonCell(label, leading: true, header: true),
                     _ComparisonCell(
-                      _comparisonAmount(
-                        isExpense ? -value : value,
-                        signed: true,
-                      ),
-                      color: color,
+                      _comparisonAmount(value, signed: true),
+                      color: _signedColor(value),
+                    ),
+                    _ComparisonCell(
+                      _comparisonAmount(prior, signed: true),
+                      color: _signedColor(prior),
                     ),
                     _ComparisonCell(
                       _comparisonAmount(
-                        isExpense ? -prior : prior,
-                        signed: true,
-                      ),
-                      color: prior < 0 ? expenseColor : ink,
-                    ),
-                    _ComparisonCell(
-                      _comparisonAmount(value - prior, signed: true),
-                      color: _changeColor(
                         isExpense ? prior - value : value - prior,
+                        signed: true,
                       ),
+                      color: _signedColor(value - prior),
                     ),
                   ],
                 ),
@@ -772,7 +761,7 @@ class _ComparisonCell extends StatelessWidget {
   );
 }
 
-Color _changeColor(int amount) => switch (amount) {
+Color _signedColor(int amount) => switch (amount) {
   > 0 => incomeColor,
   < 0 => expenseColor,
   _ => mutedInk,
