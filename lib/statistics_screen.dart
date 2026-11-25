@@ -697,7 +697,7 @@ class _PeriodComparison extends StatelessWidget {
                     ),
                 ],
               ),
-              for (final (label, value, prior, color, lowerIsBetter) in [
+              for (final (label, value, prior, color, isExpense) in [
                 ('收入', total.income, past.income, incomeColor, false),
                 ('支出', total.expense, past.expense, expenseColor, true),
                 (
@@ -711,19 +711,24 @@ class _PeriodComparison extends StatelessWidget {
                 TableRow(
                   children: [
                     _ComparisonCell(label, leading: true, header: true),
-                    _ComparisonCell(_comparisonAmount(value), color: color),
                     _ComparisonCell(
-                      _comparisonAmount(prior),
-                      color: prior < 0 ? expenseColor : ink,
+                      _comparisonAmount(
+                        isExpense ? -value : value,
+                        signed: true,
+                      ),
+                      color: color,
                     ),
                     _ComparisonCell(
                       _comparisonAmount(
-                        value - prior,
+                        isExpense ? -prior : prior,
                         signed: true,
-                        currency: false,
                       ),
+                      color: prior < 0 ? expenseColor : ink,
+                    ),
+                    _ComparisonCell(
+                      _comparisonAmount(value - prior, signed: true),
                       color: _changeColor(
-                        lowerIsBetter ? prior - value : value - prior,
+                        isExpense ? prior - value : value - prior,
                       ),
                     ),
                   ],

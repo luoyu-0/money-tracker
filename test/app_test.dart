@@ -381,17 +381,26 @@ void main() {
         find.descendant(of: table, matching: find.text(value));
     expect(find.text('结余变化（上月同期 → 本月）'), findsOneWidget);
     expect(find.text('结余改善 242.25 元'), findsOneWidget);
-    for (final value in [
-      '¥110.25',
-      '¥24',
+    final cells = find.descendant(of: table, matching: find.byType(Text));
+    expect(tester.widgetList<Text>(cells).map((cell) => cell.data), [
+      '项目',
+      '本月',
+      '上月同期',
+      '变动',
+      '收入',
+      '+¥110.25',
+      '¥0',
+      '+¥110.25',
+      '支出',
+      '−¥24',
       '−¥156',
-      '+110.25',
-      '−132',
-      '+242.25',
-    ]) {
-      expect(tableText(value), findsOneWidget);
-    }
-    expect(tester.widget<Text>(tableText('−132')).style?.color, incomeColor);
+      '−¥132',
+      '结余',
+      '+¥86.25',
+      '−¥156',
+      '+¥242.25',
+    ]);
+    expect(tester.widget<Text>(tableText('−¥132')).style?.color, incomeColor);
     expect(find.text('选择对比时段'), findsNothing);
     expect(find.text('本时段收支'), findsNothing);
     expect(find.text('本月明细'), findsNothing);
