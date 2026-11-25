@@ -195,29 +195,97 @@ class _HomeState extends State<_Home> {
             icon: const Icon(Icons.add),
             label: const Text('记一笔'),
           ),
-    bottomNavigationBar: NavigationBar(
+    bottomNavigationBar: _HomeNavigation(
+      pages: pages,
       selectedIndex: selected,
-      animationDuration: motion(context, 180),
       onDestinationSelected: settingsBusy ? null : selectPage,
-      destinations: const [
-        NavigationDestination(
-          icon: Icon(Icons.receipt_long_outlined),
-          selectedIcon: Icon(Icons.receipt_long),
-          label: '账本',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.bar_chart_outlined),
-          selectedIcon: Icon(Icons.bar_chart),
-          label: '统计',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.settings_outlined),
-          selectedIcon: Icon(Icons.settings),
-          label: '设置',
-        ),
-      ],
     ),
   );
+}
+
+class _HomeNavigation extends StatelessWidget {
+  const _HomeNavigation({
+    required this.pages,
+    required this.selectedIndex,
+    required this.onDestinationSelected,
+  });
+
+  final PageController pages;
+  final int selectedIndex;
+  final ValueChanged<int>? onDestinationSelected;
+
+  static const _destinations = [
+    NavigationDestination(
+      icon: Icon(Icons.receipt_long_outlined),
+      selectedIcon: Icon(Icons.receipt_long),
+      label: '账本',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.bar_chart_outlined),
+      selectedIcon: Icon(Icons.bar_chart),
+      label: '统计',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.settings_outlined),
+      selectedIcon: Icon(Icons.settings),
+      label: '设置',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = NavigationBarTheme.of(context);
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    return ColoredBox(
+      color: theme.backgroundColor ?? surface,
+      child: SafeArea(
+        child: Stack(
+          children: [
+            Positioned.fill(
+              top: 6,
+              child: IgnorePointer(
+                child: AnimatedBuilder(
+                  animation: pages,
+                  child: Center(
+                    heightFactor: 1,
+                    child: NavigationIndicator(
+                      key: const ValueKey('home-navigation-indicator'),
+                      animation: const AlwaysStoppedAnimation(1),
+                      color: theme.indicatorColor ?? blueTint,
+                    ),
+                  ),
+                  builder: (context, indicator) {
+                    final page = !reduceMotion && pages.hasClients
+                        ? pages.page ?? selectedIndex.toDouble()
+                        : selectedIndex.toDouble();
+                    final last = _destinations.length - 1;
+                    return Align(
+                      alignment: AlignmentDirectional(
+                        2 * page.clamp(0, last) / last - 1,
+                        -1,
+                      ),
+                      child: FractionallySizedBox(
+                        widthFactor: 1 / _destinations.length,
+                        child: indicator,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            NavigationBar(
+              backgroundColor: Colors.transparent,
+              indicatorColor: Colors.transparent,
+              selectedIndex: selectedIndex,
+              animationDuration: motion(context, 180),
+              onDestinationSelected: onDestinationSelected,
+              destinations: _destinations,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _PreservedPage extends StatefulWidget {

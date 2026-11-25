@@ -9,6 +9,7 @@ import 'package:money_tracker/ui.dart';
 import 'package:money_tracker/ledger.dart';
 import 'package:money_tracker/ledger_store.dart';
 import 'package:money_tracker/main.dart';
+import 'package:money_tracker/settings_screen.dart';
 import 'package:money_tracker/statistics_screen.dart';
 import 'package:sqflite/sqflite.dart';
 
@@ -448,12 +449,30 @@ void main() {
     await tester.pumpAndSettle();
 
     final pager = find.byType(PageView);
-    await tester.drag(pager, const Offset(-350, 0));
+    final indicator = find.byKey(const ValueKey('home-navigation-indicator'));
+    final start = tester.getCenter(indicator);
+    final gesture = await tester.startGesture(
+      tester.getCenter(pager) + const Offset(150, 0),
+    );
+    await gesture.moveBy(const Offset(-25, 0));
+    await gesture.moveBy(const Offset(-115, 0));
+    await tester.pump();
+    final dragging = tester.getCenter(indicator);
+    expect(dragging.dx, greaterThan(start.dx));
+    expect(dragging.dx, lessThan(start.dx + tester.getSize(pager).width / 6));
+    expect(dragging.dy, start.dy);
+    await gesture.moveBy(const Offset(60, 0));
+    await tester.pump();
+    expect(tester.getCenter(indicator).dx, lessThan(dragging.dx));
+    await gesture.moveBy(const Offset(-220, 0));
+    await gesture.up();
     await tester.pumpAndSettle();
     expect(
       tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
       1,
     );
+    final statistics = tester.getCenter(indicator);
+    expect(statistics.dx, closeTo(tester.getCenter(pager).dx, 1));
     await tester.tap(find.text('本周'));
     await tester.pumpAndSettle();
     await tester.drag(pager, const Offset(350, 0));
@@ -463,11 +482,76 @@ void main() {
       0,
     );
     await tester.tap(find.widgetWithText(NavigationDestination, '统计'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(
+      tester.getCenter(indicator).dx,
+      allOf(greaterThan(start.dx), lessThan(statistics.dx)),
+    );
     await tester.pumpAndSettle();
     expect(
       find.text(PeriodKind.week.ranges(DateTime.now()).$1.label),
       findsWidgets,
     );
+  });
+
+  testWidgets('设置箭头只标记子页，清除弹窗的安全操作并排', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(320, 680));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    tester.platformDispatcher.textScaleFactorTestValue = 1.8;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await tester.pumpWidget(
+      MoneyTrackerApp(openStore: () async => _TestStore()),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(NavigationDestination, '设置'));
+    await tester.pumpAndSettle();
+
+    final settings = find.byType(SettingsScreen);
+    final arrow = find.descendant(
+      of: settings,
+      matching: find.byIcon(Icons.chevron_right),
+    );
+    expect(arrow, findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.widgetWithText(ListTile, '模型服务配置'),
+        matching: arrow,
+      ),
+      findsOneWidget,
+    );
+    final clear = find.widgetWithText(ListTile, '清除本机数据');
+    await tester.scrollUntilVisible(
+      clear,
+      160,
+      scrollable: find.descendant(
+        of: settings,
+        matching: find.byType(Scrollable),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(clear);
+    await tester.pumpAndSettle();
+
+    final cancel = find.widgetWithText(TextButton, '取消');
+    final backup = find.widgetWithText(OutlinedButton, '先备份');
+    final confirm = find.widgetWithText(FilledButton, '确认清除');
+    expect(tester.getCenter(cancel).dy, tester.getCenter(backup).dy);
+    expect(tester.getCenter(cancel).dx, lessThan(tester.getCenter(backup).dx));
+    expect(
+      tester.getTopLeft(confirm).dy,
+      greaterThan(tester.getBottomLeft(backup).dy),
+    );
+    expect(
+      tester.getSize(confirm).width,
+      greaterThan(tester.getSize(backup).width),
+    );
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(cancel);
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(tester.widget<ListTile>(clear).enabled, isTrue);
   });
 
   testWidgets('金额与交易对方的键盘 inset 在当帧生效', (tester) async {

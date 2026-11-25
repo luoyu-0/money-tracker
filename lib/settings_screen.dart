@@ -139,23 +139,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final action = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
+        insetPadding: const EdgeInsets.all(24),
+        constraints: const BoxConstraints(maxWidth: 400),
+        scrollable: true,
         title: const Text('清除本机数据？'),
         content: const Text(
           '将清除账目、自定义候选值、AI 报告、设置、API Key 和临时文件。已保存在应用外的备份和导出文件可以继续使用。',
         ),
+        actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, 'backup'),
-            child: const Text('先备份'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, 'clear'),
-            style: FilledButton.styleFrom(backgroundColor: expenseColor),
-            child: const Text('确认清除'),
+          SizedBox(
+            width: double.infinity,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('取消', textAlign: TextAlign.center),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(context, 'backup'),
+                        child: const Text('先备份', textAlign: TextAlign.center),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context, 'clear'),
+                  style: FilledButton.styleFrom(backgroundColor: expenseColor),
+                  child: const Text('确认清除', textAlign: TextAlign.center),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -196,13 +218,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
     Future<void> Function() action, {
     String? subtitle,
     bool destructive = false,
+    bool opensPage = false,
   }) => ListTile(
     leading: Icon(icon),
     title: Text(title),
     subtitle: subtitle == null ? null : Text(subtitle),
     textColor: destructive ? expenseColor : ink,
     iconColor: destructive ? expenseColor : mutedInk,
-    trailing: const Icon(Icons.chevron_right),
+    trailing: opensPage ? const Icon(Icons.chevron_right) : null,
     enabled: !busy,
     onTap: () => run(action),
   );
@@ -219,6 +242,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           '模型服务配置',
           configureAi,
           subtitle: '选择服务商并保存 API Key',
+          opensPage: true,
         ),
       ),
       const SectionTitle('备份与迁移'),
