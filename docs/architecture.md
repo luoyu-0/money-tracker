@@ -9,6 +9,8 @@
 
 SQLite 支持事务、日期筛选和汇总，`sqflite` 需要显式管理 SQL 和 schema 迁移。参见 [sqflite 文档](https://pub.dev/packages/sqflite)。
 
+冷启动时先读取账本首屏所需的数据。SQLite 汇总本月至今的收支和上月结余，账目列表只查询最近 60 笔及用于判断下一页的一笔。界面在这两项查询完成后直接展示账本。
+
 ## 已批准的依赖
 
 | 依赖 | 用途与取舍 |
@@ -30,4 +32,7 @@ SQLite 支持事务、日期筛选和汇总，`sqflite` 需要显式管理 SQL �
 ## 验证环境
 
 - Android 通过无线调试连接真机，验收离线记账、统计、文件交换、设置清理和 AI 请求。
+- Android 冷启动和掉帧优先用同一设备上的 Profile 包测量，记录调试包数据时注明构建模式。参见 [Flutter 性能分析](https://docs.flutter.dev/perf/ui-performance)。
 - iOS 保留目标工程。当前缺少 iOS 真机，有 macOS 和 Xcode 时可先进行构建和模拟器验证。参见 [Flutter iOS 环境要求](https://docs.flutter.dev/platform-integration/ios/setup)。
+
+Android 使用 Gradle 8.14.5、Android Gradle Plugin 8.13.1 和 Kotlin 2.3.20。本地使用 JDK 21，可以复用已安装的 Android 工具链。首次运行 `flutter build apk --debug` 可初始化本机构建配置。如果 Flutter 选用了 JDK 25，可改用 JDK 21 执行 `android` 目录的 `gradlew :app:assembleDebug`。Android 关闭 Kotlin 增量编译，以支持 Windows 上项目和 Pub 缓存位于不同盘符。常规验证运行 `flutter analyze` 和 `flutter test`。
